@@ -33,10 +33,7 @@ containers:
     # Included for simplicity in integration tests.
     upstream-source: python:3.8.2-slim-buster
 
-# This field populates the Resources tab on Charmhub.
 resources:
-  # An OCI image resource for each container listed above.
-  # You may remove this if your charm will run without a workload sidecar container.
   temporal-worker-image:
     type: oci-image
-    description: OCI image for Temporal
+    description: OCI image containing Python package.
