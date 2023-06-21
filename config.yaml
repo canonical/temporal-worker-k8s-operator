@@ -12,3 +12,111 @@ options:
       Acceptable values are: "info", "debug", "warning", "error" and "critical"
     default: "info"
     type: string
+
+  host:
+    description: The hostname of the Temporal server.
+    default: ""
+    type: string
+
+  namespace:
+    description: Temporal namespace the worker should connect to.
+    default: ""
+    type: string
+
+  queue:
+    description: Temporal task queue the worker should connect to
+    default: ""
+    type: string
+
+  encryption-key:
+    description: Base64-encoded key used for data encryption.
+    default: ""
+    type: string
+
+  auth-enabled:
+      description: Determines if authentication is enabled or not.
+      default: False
+      type: boolean    
+
+  auth-provider:
+    description: |
+      Authentication provider for user authentication.
+    
+      Acceptable values are "candid" and "google".
+    default: ""
+    type: string
+
+  tls-root-cas:
+    description: Root certificate authority (CA) certificates for TLS communication.
+    default: ""
+    type: string
+
+  candid-url:
+    description: URL of the Candid service.
+    default: ""
+    type: string
+
+  candid-username:
+    description: Username for accessing the Candid service.
+    default: ""
+    type: string
+
+  candid-public-key:
+    description: Public key for Candid authentication.
+    default: ""
+    type: string
+
+  candid-private-key:
+    description: Private key for Candid authentication.
+    default: ""
+    type: string
+
+  oidc-auth-type:
+    description: Authentication type for OIDC authentication.
+    default: "service_account"
+    type: string
+
+  oidc-project-id:
+    description: Project ID for OIDC authentication.
+    default: ""
+    type: string
+
+  oidc-private-key-id:
+    description: Private key ID for OIDC authentication.
+    default: ""
+    type: string
+
+  oidc-private-key:
+    description: Project key for OIDC authentication.
+    default: ""
+    type: string
+
+  oidc-client-email:
+    description: Client email for OIDC authentication.
+    default: ""
+    type: string
+
+  oidc-client-id:
+    description: Client ID for OIDC authentication.
+    default: ""
+    type: string
+
+  oidc-auth-uri:
+    description: Authentication URI for OIDC authentication.
+    default: ""
+    type: string
+
+  oidc-token-uri:
+    description: Token URI for OIDC authentication.
+    default: ""
+    type: string
+
+  oidc-auth-cert-url:
+    description: Authentication certificate URL for OIDC authentication.
+    default: ""
+    type: string
+
+  oidc-client-cert-url:
+    description: Client certificate URL for OIDC authentication.
+    default: ""
+    type: string

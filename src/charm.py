@@ -1,103 +1,202 @@
 #!/usr/bin/env python3
-# Copyright 2023 Ali
+# Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 #
 # Learn more at: https://juju.is/docs/sdk
 
-"""Charm the service.
+"""Charm definition and helpers."""
 
-Refer to the following post for a quick-start guide that will help you
-develop a new k8s charm using the Operator Framework:
-
-https://discourse.charmhub.io/t/4208
-"""
-
+import json
 import logging
+from pathlib import Path
 
-import ops
+from ops import main
+from ops.charm import CharmBase
+from ops.model import ActiveStatus, BlockedStatus, Container, WaitingStatus
 
-# Log messages can be retrieved using juju debug-log
+from log import log_event_handler
+
 logger = logging.getLogger(__name__)
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
+REQUIRED_CHARM_CONFIG = ["host", "namespace", "queue"]
+REQUIRED_CANDID_CONFIG = ["candid-url", "candid-username", "candid-public-key", "candid-private-key"]
+REQUIRED_OIDC_CONFIG = [
+    "oidc-auth-type",
+    "oidc-project-id",
+    "oidc-private-key-id",
+    "oidc-private-key",
+    "oidc-client-email",
+    "oidc-client-id",
+    "oidc-auth-uri",
+    "oidc-token-uri",
+    "oidc-auth-cert-url",
+    "oidc-client-cert-url",
+]
+SUPPORTED_AUTH_PROVIDERS = ["candid", "google"]
 
 
-class TemporalWorkerK8SOperatorCharm(ops.CharmBase):
+class TemporalWorkerK8SOperatorCharm(CharmBase):
     """Charm the service."""
 
     def __init__(self, *args):
+        """Construct.
+
+        Args:
+            args: Ignore.
+        """
         super().__init__(*args)
-        self.framework.observe(self.on.httpbin_pebble_ready, self._on_httpbin_pebble_ready)
+        self.name = "temporal-worker"
+
         self.framework.observe(self.on.config_changed, self._on_config_changed)
+        self.framework.observe(self.on.temporal_worker_pebble_ready, self._on_temporal_worker_pebble_ready)
 
-    def _on_httpbin_pebble_ready(self, event: ops.PebbleReadyEvent):
-        """Define and start a workload using the Pebble API.
+    @log_event_handler(logger)
+    def _on_temporal_worker_pebble_ready(self, event):
+        """Define and start temporal using the Pebble API.
 
-        Change this example to suit your needs. You'll need to specify the right entrypoint and
-        environment configuration for your specific workload.
-
-        Learn more about interacting with Pebble at at https://juju.is/docs/sdk/pebble.
+        Args:
+            event: The event triggered when the relation changed.
         """
-        # Get a reference the container attribute on the PebbleReadyEvent
-        container = event.workload
-        # Add initial Pebble config layer using the Pebble API
-        container.add_layer("httpbin", self._pebble_layer, combine=True)
-        # Make Pebble reevaluate its plan, ensuring any services are started if enabled.
-        container.replan()
-        # Learn more about statuses in the SDK docs:
-        # https://juju.is/docs/sdk/constructs#heading--statuses
-        self.unit.status = ops.ActiveStatus()
+        self._update(event)
 
-    def _on_config_changed(self, event: ops.ConfigChangedEvent):
-        """Handle changed configuration.
+    @log_event_handler(logger)
+    def _on_config_changed(self, event):
+        """Handle configuration changes.
 
-        Change this example to suit your needs. If you don't need to handle config, you can remove
-        this method.
-
-        Learn more about config at https://juju.is/docs/sdk/config
+        Args:
+            event: The event triggered when the relation changed.
         """
-        # Fetch the new config value
+        self.unit.status = WaitingStatus("configuring temporal worker")
+        self._update(event)
+
+    def _validate(self):
+        """Validate that configuration and relations are valid and ready.
+
+        Raises:
+            ValueError: in case of invalid configuration.
+        """
         log_level = self.model.config["log-level"].lower()
+        if log_level not in VALID_LOG_LEVELS:
+            raise ValueError(f"config: invalid log level {log_level!r}")
 
-        # Do some validation of the configuration option
-        if log_level in VALID_LOG_LEVELS:
-            # The config is good, so update the configuration of the workload
-            container = self.unit.get_container("httpbin")
-            # Verify that we can connect to the Pebble API in the workload container
-            if container.can_connect():
-                # Push an updated layer with the new config
-                container.add_layer("httpbin", self._pebble_layer, combine=True)
-                container.replan()
+        self._check_required_config(REQUIRED_CHARM_CONFIG)
 
-                logger.debug("Log level for gunicorn changed to '%s'", log_level)
-                self.unit.status = ops.ActiveStatus()
-            else:
-                # We were unable to connect to the Pebble API, so we defer this event
-                event.defer()
-                self.unit.status = ops.WaitingStatus("waiting for Pebble API")
-        else:
-            # In this case, the config option is bad, so block the charm and notify the operator.
-            self.unit.status = ops.BlockedStatus("invalid log level: '{log_level}'")
+        if self.config["auth-enabled"]:
+            if not self.config["auth-provider"]:
+                raise ValueError("Invalid config: auth-provider value missing")
 
-    @property
-    def _pebble_layer(self):
-        """Return a dictionary representing a Pebble layer."""
-        return {
-            "summary": "httpbin layer",
-            "description": "pebble config layer for httpbin",
+            if not self.config["auth-provider"] in SUPPORTED_AUTH_PROVIDERS:
+                raise ValueError("Invalid config: auth-provider not supported")
+
+            if self.config["auth-provider"] == "candid":
+                self._check_required_config(REQUIRED_CANDID_CONFIG)
+
+            if self.config["auth-provider"] == "google":
+                self._check_required_config(REQUIRED_OIDC_CONFIG)
+
+    def _check_required_config(self, config_list):
+        """Check if required config has been set by user.
+
+        Args:
+            config_list: list of required config parameters.
+
+        Raises:
+            ValueError: if any of the required config is not set.
+        """
+        for param in config_list:
+            if self.config[param].strip() == "":
+                raise ValueError(f"Invalid config: {param} value missing")
+
+    def _update(self, event):
+        """Update the Temporal worker configuration and replan its execution.
+
+        Args:
+            event: The event triggered when the relation changed.
+        """
+        try:
+            self._validate()
+        except ValueError as err:
+            self.unit.status = BlockedStatus(str(err))
+            return
+
+        container = self.unit.get_container(self.name)
+        if not container.can_connect():
+            event.defer()
+            return
+
+        # ensure the container is set up
+        _setup_container(container)
+
+        logger.info("Configuring Temporal worker")
+
+        pebble_layer = {
+            "summary": "temporal worker layer",
             "services": {
-                "httpbin": {
-                    "override": "replace",
-                    "summary": "httpbin",
-                    "command": "gunicorn -b 0.0.0.0:80 httpbin:app -k gevent",
+                self.name: {
+                    "summary": "temporal worker",
+                    "command": f"python worker.py '{json.dumps(dict(self.config))}'",
                     "startup": "enabled",
-                    "environment": {
-                        "GUNICORN_CMD_ARGS": f"--log-level {self.model.config['log-level']}"
-                    },
+                    "override": "replace",
                 }
             },
         }
 
+        container.add_layer(self.name, pebble_layer, combine=True)
+        container.replan()
+
+        self.unit.status = ActiveStatus()
+
+
+def _setup_container(container: Container):
+    """Copy worker file to the container and install dependencies.
+
+    Args:
+        container: Container unit on which to perform action.
+    """
+    resources_path = Path(__file__).parent / "resources"
+    _push_container_file(container, resources_path, "/worker.py", resources_path / "worker.py")
+    _push_container_file(
+        container,
+        resources_path,
+        "/temporal_client/__init__.py",
+        resources_path / "temporal_client/__init__.py",
+    )
+    _push_container_file(
+        container,
+        resources_path,
+        "/temporal_client/workflows.py",
+        resources_path / "temporal_client/workflows.py",
+    )
+    _push_container_file(
+        container,
+        resources_path,
+        "/temporal_client/activities.py",
+        resources_path / "temporal_client/activities.py",
+    )
+
+    # Install worker dependencies
+    worker_dependencies_path = resources_path / "worker-dependencies.txt"
+    with open(worker_dependencies_path, "r") as dependencies_file:
+        dependencies = dependencies_file.read().split("\n")
+        logger.info(f"installing worker dependencies {dependencies}...")
+        container.exec(["pip", "install", *dependencies]).wait()
+
+
+def _push_container_file(container: Container, src_path, dest_path, resource):
+    """Copy worker file to the container and install dependencies.
+
+    Args:
+        container: Container unit on which to perform action.
+        src_path: resource path.
+        dest_path: destination path on container.
+        resource: resource to push to container.
+    """
+    source_path = src_path / resource
+    with open(source_path, "r") as file_source:
+        logger.info(f"pushing {resource} source...")
+        container.push(dest_path, file_source, make_dirs=True)
+
 
 if __name__ == "__main__":  # pragma: nocover
-    ops.main(TemporalWorkerK8SOperatorCharm)
+    main.main(TemporalWorkerK8SOperatorCharm)

@@ -1,23 +1,29 @@
-# Copyright 2023 Ali
+# Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 #
 # Learn more about testing at: https://juju.is/docs/sdk/testing
+
+"""Temporal charm integration tests."""
 
 import unittest
 
 import ops
 import ops.testing
+
 from charm import TemporalWorkerK8SOperatorCharm
 
 
 class TestCharm(unittest.TestCase):
+    """Unit tests."""
+
     def setUp(self):
+        """Set up for the unit tests."""
         self.harness = ops.testing.Harness(TemporalWorkerK8SOperatorCharm)
         self.addCleanup(self.harness.cleanup)
         self.harness.begin()
 
     def test_httpbin_pebble_ready(self):
-        # Expected plan after Pebble ready with default config
+        """Expected plan after Pebble ready with default config."""
         expected_plan = {
             "services": {
                 "httpbin": {
@@ -42,7 +48,7 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(self.harness.model.unit.status, ops.ActiveStatus())
 
     def test_config_changed_valid_can_connect(self):
-        # Ensure the simulated Pebble API is reachable
+        """Ensure the simulated Pebble API is reachable."""
         self.harness.set_can_connect("httpbin", True)
         # Trigger a config-changed event with an updated value
         self.harness.update_config({"log-level": "debug"})
@@ -54,13 +60,13 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(self.harness.model.unit.status, ops.ActiveStatus())
 
     def test_config_changed_valid_cannot_connect(self):
-        # Trigger a config-changed event with an updated value
+        """Trigger a config-changed event with an updated value."""
         self.harness.update_config({"log-level": "debug"})
         # Check the charm is in WaitingStatus
         self.assertIsInstance(self.harness.model.unit.status, ops.WaitingStatus)
 
     def test_config_changed_invalid(self):
-        # Ensure the simulated Pebble API is reachable
+        """Ensure the simulated Pebble API is reachable."""
         self.harness.set_can_connect("httpbin", True)
         # Trigger a config-changed event with an updated value
         self.harness.update_config({"log-level": "foobar"})
