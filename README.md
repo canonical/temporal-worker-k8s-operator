@@ -1,26 +1,43 @@
-<!--
-Avoid using this README file for information that is maintained or published elsewhere, e.g.:
+# Temporal Worker K8s Operator
 
-* metadata.yaml > published on Charmhub
-* documentation > published on (or linked to from) Charmhub
-* detailed contribution guide > documentation or CONTRIBUTING.md
+This is the Kubernetes Python Operator for the Temporal worker.
 
-Use links instead.
--->
+## Description
 
-# temporal-worker-k8s-operator
+Temporal is a developer-first, open source platform that ensures the successful
+execution of services and applications (using workflows).
 
-Charmhub package name: operator-template
-More information: https://charmhub.io/temporal-worker-k8s-operator
+Use Workflow as Code (TM) to build and operate resilient applications. Leverage
+developer friendly primitives and avoid fighting your infrastructure
 
-Describe your charm in one or two sentences.
+This operator provides a Temporal worker, and consists of Python scripts which
+connect to a deployed Temporal server.
 
-## Other resources
+## Usage
 
-<!-- If your charm is documented somewhere else other than Charmhub, provide a link separately. -->
+### Deploying
 
-- [Read more](https://example.com)
+The Temporal worker operator can be deployed and connected to a deployed
+Temporal server using the Juju command line as follows:
 
-- [Contributing](CONTRIBUTING.md) <!-- or link to other contribution documentation -->
+```bash
+juju deploy temporal-worker-k8s
+juju config temporal-worker-k8s --file=path/to/config.yaml
+```
 
-- See the [Juju SDK documentation](https://juju.is/docs/sdk) for more information about developing and improving charms.
+## Verifying
+
+To verify that the setup is running correctly, run `juju status --watch 1s` and
+ensure the pod is active.
+
+To run a basic workflow, you may use a simple client (e.g.
+[sdk-python sample](https://github.com/temporalio/sdk-python#quick-start)) and
+connect to the same Temporal server. If run on the same namespace and task queue
+as the Temporal worker, it should be executed successfully.
+
+## Contributing
+
+This charm is still in active development. Please see the
+[Juju SDK docs](https://juju.is/docs/sdk) for guidelines on enhancements to this
+charm following best practice guidelines, and
+[CONTRIBUTING.md](./CONTRIBUTING.md) for developer guidance.
