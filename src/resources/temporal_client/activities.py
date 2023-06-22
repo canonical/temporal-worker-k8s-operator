@@ -14,8 +14,8 @@ class ComposeGreetingInput:
     """Greeting class.
 
     Attrs:
-        greeting: abc.
-        name: abc.
+        greeting: greeting string.
+        name: name string.
     """
 
     greeting: str
