@@ -44,9 +44,6 @@ class WorkflowsActions(framework.Object):
             event.fail("action cannot be performed on non-leader unit")
             return
 
-        if self.charm._state.supported_workflows is None:
-            self.charm._state.supported_workflows = []
-
         sw = self.charm._state.supported_workflows
         for workflow in event.params["workflows"].split(","):
             if workflow not in sw:
@@ -72,9 +69,6 @@ class WorkflowsActions(framework.Object):
             event.fail("action cannot be performed on non-leader unit")
             return
 
-        if self.charm._state.supported_workflows is None:
-            self.charm._state.supported_workflows = []
-
         sw = [
             item for item in self.charm._state.supported_workflows if item not in event.params["workflows"].split(",")
         ]
@@ -92,8 +86,5 @@ class WorkflowsActions(framework.Object):
         if not self.charm._state.is_ready():
             event.defer()
             return
-
-        if self.charm._state.supported_workflows is None:
-            self.charm._state.supported_workflows = []
 
         event.set_results({"result": "command succeeded", "supported-workflows": self.charm._state.supported_workflows})

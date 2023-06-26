@@ -42,6 +42,13 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self._state = State(self.app, lambda: self.model.get_relation("peer"))
         self.name = "temporal-worker"
 
+        if self.unit.is_leader():
+            if self._state.supported_workflows is None:
+                self._state.supported_workflows = []
+            
+            if self._state.supported_activities is None:
+                self._state.supported_activities = []
+
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.temporal_worker_pebble_ready, self._on_temporal_worker_pebble_ready)
 
