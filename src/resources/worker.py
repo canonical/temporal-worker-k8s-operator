@@ -6,11 +6,12 @@
 """Temporal client worker."""
 
 import asyncio
+import glob
 import json
+import os
 import sys
+from importlib import import_module
 
-from temporal_client.activities import compose_greeting
-from temporal_client.workflows import GreetingWorkflow
 from temporalio.worker import Worker
 from temporallib.auth import (
     AuthOptions,
@@ -55,17 +56,55 @@ def _get_auth_header(charm_config):
     return None
 
 
-async def run_worker(charm_config):
+def _import_modules(module_type, module_name, supported_modules):
+    """Extract supported workflows and activities .
+
+    Args:
+        module_type: "workflows" or "activities".
+        module_name: Parent module name extracted from wheel file.
+        supported_modules: list of supported modules to be extracted from module file.
+
+    Returns:
+        List of supported module references extracted from .py file.
+    """
+    folder_name = "user_provided"
+    folder_path = os.path.join(os.getcwd(), folder_name, module_name, module_type)
+    sys.path.append(folder_path)
+    file_names = glob.glob(f"{folder_path}/*.py")
+    file_names = [os.path.basename(file) for file in file_names]
+
+    print(f"FILE NAMESSS: {file_names}")
+
+    module_list = []
+
+    for file_name in file_names:
+        module_name = file_name[:-3]
+        module = import_module(module_name)
+
+        for sm in supported_modules:
+            if hasattr(module, sm):
+                module_list.append(getattr(module, sm))
+
+    return module_list
+
+
+async def run_worker(charm_config, supported_workflows, supported_activities, module_name):
     """Connect Temporal worker to Temporal server.
 
     Args:
         charm_config: Charm config containing worker options.
+        supported_workflows: Comma-separated list of workflows supported by the worker.
+        supported_activities: Comma-separated list of activities supported by the worker.
+        module_name: Parent module name extracted from wheel file.
     """
     client_config = Options(
         host=charm_config["host"],
         namespace=charm_config["namespace"],
         queue=charm_config["queue"],
     )
+
+    workflows = _import_modules("workflows", module_name=module_name, supported_modules=supported_workflows)
+    activities = _import_modules("activities", module_name=module_name, supported_modules=supported_activities)
 
     if charm_config["tls-root-cas"].strip() != "":
         client_config.tls_root_cas = charm_config["tls-root-cas"]
@@ -81,12 +120,16 @@ async def run_worker(charm_config):
     worker = Worker(
         client,
         task_queue=charm_config["queue"],
-        workflows=[GreetingWorkflow],
-        activities=[compose_greeting],
+        workflows=workflows,
+        activities=activities,
     )
     await worker.run()
 
 
 if __name__ == "__main__":  # pragma: nocover
     cfg = json.loads(sys.argv[1])
-    asyncio.run(run_worker(cfg))
+    state_workflows = sys.argv[2].split(",")
+    state_activities = sys.argv[3].split(",")
+    mn = sys.argv[4]
+
+    asyncio.run(run_worker(cfg, state_workflows, state_activities, mn))
