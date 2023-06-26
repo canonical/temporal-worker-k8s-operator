@@ -73,10 +73,7 @@ def _import_modules(module_type, module_name, supported_modules):
     file_names = glob.glob(f"{folder_path}/*.py")
     file_names = [os.path.basename(file) for file in file_names]
 
-    print(f"FILE NAMESSS: {file_names}")
-
     module_list = []
-
     for file_name in file_names:
         module_name = file_name[:-3]
         module = import_module(module_name)

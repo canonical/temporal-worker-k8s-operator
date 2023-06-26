@@ -72,7 +72,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             self.unit.status = BlockedStatus(str(err))
             return
 
-    def _validate(self):
+    def _validate(self):  # noqa: C901
         """Validate that configuration and relations are valid and ready.
 
         Raises:
@@ -81,6 +81,9 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         log_level = self.model.config["log-level"].lower()
         if log_level not in VALID_LOG_LEVELS:
             raise ValueError(f"config: invalid log level {log_level!r}")
+
+        if not self._state.is_ready():
+            raise ValueError("peer relation not ready")
 
         self._check_required_config(REQUIRED_CHARM_CONFIG)
 
@@ -122,6 +125,9 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             event.defer()
             return
 
+        if self.unit.is_leader():
+            self._state.module_name = None
+
         try:
             resource_path = self.model.resources.fetch("workflows-file")
 
@@ -144,9 +150,12 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
                 # Find the name of the module provided by the user and set it in state.
                 command = "find /user_provided -mindepth 1 -maxdepth 1 -type d ! -name *.dist-info ! -name *.whl"
-                out, err = container.exec(command.split(" ")).wait_output()
-                module_name = out.split("\n")
+                out, error = container.exec(command.split(" ")).wait_output()
 
+                if error is not None and error.strip() != "":
+                    raise ValueError("Invalid state: failed to extract module name from wheel file")
+
+                module_name = out.split("\n")
                 if self.unit.is_leader():
                     self._state.module_name = module_name[0].split("/")[-1]
 
