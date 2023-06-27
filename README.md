@@ -39,7 +39,7 @@ The structure of the built wheel file must follow the same structure:
 - activities/
     - activity-a.py
     - activity-b.py
-- some_other_direcory/
+- some_other_directory/
 - some_helper_file.py
 ```
 
