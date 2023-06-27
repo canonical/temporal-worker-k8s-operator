@@ -44,11 +44,12 @@ class ActivitiesActions(framework.Object):
             event.fail("action cannot be performed on non-leader unit")
             return
 
-        sw = self.charm._state.supported_activities
-        for workflow in event.params["activities"].split(","):
-            if workflow not in sw:
-                sw.append(workflow)
-        self.charm._state.supported_activities = sw
+        sa = self.charm._state.supported_activities
+        for activity in event.params["activities"].split(","):
+            activity = activity.strip()
+            if activity != "" and activity not in sa:
+                sa.append(activity)
+        self.charm._state.supported_activities = sa
 
         event.set_results(
             {"result": "command succeeded", "supported-activities": self.charm._state.supported_activities}

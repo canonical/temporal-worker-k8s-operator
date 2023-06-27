@@ -10,11 +10,13 @@ import json
 import logging
 from pathlib import Path
 
+from dotenv import dotenv_values
 from ops import main
 from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, Container, ModelError, WaitingStatus
 
 from actions.activities import ActivitiesActions
+from actions.dependencies import DependenciesActions
 from actions.workflows import WorkflowsActions
 from literals import (
     REQUIRED_CANDID_CONFIG,
@@ -42,18 +44,12 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self._state = State(self.app, lambda: self.model.get_relation("peer"))
         self.name = "temporal-worker"
 
-        if self.unit.is_leader():
-            if self._state.supported_workflows is None:
-                self._state.supported_workflows = []
-            
-            if self._state.supported_activities is None:
-                self._state.supported_activities = []
-
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.temporal_worker_pebble_ready, self._on_temporal_worker_pebble_ready)
 
         self.workflows_actions = WorkflowsActions(self)
         self.activities_actions = ActivitiesActions(self)
+        self.dependencies_actions = DependenciesActions(self)
 
     @log_event_handler(logger)
     def _on_temporal_worker_pebble_ready(self, event):
@@ -62,6 +58,18 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         Args:
             event: The event triggered when the relation changed.
         """
+        if not self._state.is_ready():
+            event.defer()
+            return
+
+        if self.unit.is_leader():
+            if self._state.supported_workflows is None:
+                self._state.supported_workflows = []
+            if self._state.supported_activities is None:
+                self._state.supported_activities = []
+            if self._state.supported_dependencies is None:
+                self._state.supported_dependencies = []
+
         self._update(event)
 
     @log_event_handler(logger)
@@ -72,6 +80,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             event: The event triggered when the relation changed.
         """
         self.unit.status = WaitingStatus("configuring temporal worker")
+
+        self._process_env_file(event)
         try:
             self._process_wheel_file(event)
             self._update(event)
@@ -115,6 +125,23 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
             if self.config["auth-provider"] == "google":
                 self._check_required_config(REQUIRED_OIDC_CONFIG)
+
+    def _process_env_file(self, event):
+        """Process env file attached by user.
+
+        This method extracts the env file provided by the user and stores the data in the
+        charm's data bucket.
+
+        Args:
+            event: The event triggered when the relation changed.
+        """
+        try:
+            self._state.env = None
+            resource_path = self.model.resources.fetch("env-file")
+            env = dotenv_values(resource_path)
+            self._state.env = env
+        except ModelError as err:  # noqa: F841
+            logger.error(err)
 
     def _process_wheel_file(self, event):
         """Process wheel file attached by user.
@@ -160,6 +187,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 out, error = container.exec(command.split(" ")).wait_output()
 
                 if error is not None and error.strip() != "":
+                    logger.error(f"failed to extract module name from wheel file: {error}")
                     raise ValueError("Invalid state: failed to extract module name from wheel file")
 
                 module_name = out.split("\n")
@@ -219,6 +247,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                     "command": command,
                     "startup": "enabled",
                     "override": "replace",
+                    "environment": self._state.env,
                 }
             },
         }

@@ -46,7 +46,8 @@ class WorkflowsActions(framework.Object):
 
         sw = self.charm._state.supported_workflows
         for workflow in event.params["workflows"].split(","):
-            if workflow not in sw:
+            workflow = workflow.strip()
+            if workflow != "" and workflow not in sw:
                 sw.append(workflow)
         self.charm._state.supported_workflows = sw
 
