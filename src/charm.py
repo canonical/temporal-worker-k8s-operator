@@ -12,28 +12,21 @@ from pathlib import Path
 
 from ops import main
 from ops.charm import CharmBase
-from ops.model import ActiveStatus, BlockedStatus, Container, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, Container, ModelError, WaitingStatus
 
+from actions.activities import ActivitiesActions
+from actions.workflows import WorkflowsActions
+from literals import (
+    REQUIRED_CANDID_CONFIG,
+    REQUIRED_CHARM_CONFIG,
+    REQUIRED_OIDC_CONFIG,
+    SUPPORTED_AUTH_PROVIDERS,
+    VALID_LOG_LEVELS,
+)
 from log import log_event_handler
+from state import State
 
 logger = logging.getLogger(__name__)
-
-VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
-REQUIRED_CHARM_CONFIG = ["host", "namespace", "queue"]
-REQUIRED_CANDID_CONFIG = ["candid-url", "candid-username", "candid-public-key", "candid-private-key"]
-REQUIRED_OIDC_CONFIG = [
-    "oidc-auth-type",
-    "oidc-project-id",
-    "oidc-private-key-id",
-    "oidc-private-key",
-    "oidc-client-email",
-    "oidc-client-id",
-    "oidc-auth-uri",
-    "oidc-token-uri",
-    "oidc-auth-cert-url",
-    "oidc-client-cert-url",
-]
-SUPPORTED_AUTH_PROVIDERS = ["candid", "google"]
 
 
 class TemporalWorkerK8SOperatorCharm(CharmBase):
@@ -46,10 +39,21 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             args: Ignore.
         """
         super().__init__(*args)
+        self._state = State(self.app, lambda: self.model.get_relation("peer"))
         self.name = "temporal-worker"
+
+        if self.unit.is_leader():
+            if self._state.supported_workflows is None:
+                self._state.supported_workflows = []
+            
+            if self._state.supported_activities is None:
+                self._state.supported_activities = []
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.temporal_worker_pebble_ready, self._on_temporal_worker_pebble_ready)
+
+        self.workflows_actions = WorkflowsActions(self)
+        self.activities_actions = ActivitiesActions(self)
 
     @log_event_handler(logger)
     def _on_temporal_worker_pebble_ready(self, event):
@@ -68,9 +72,14 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             event: The event triggered when the relation changed.
         """
         self.unit.status = WaitingStatus("configuring temporal worker")
-        self._update(event)
+        try:
+            self._process_wheel_file(event)
+            self._update(event)
+        except ValueError as err:
+            self.unit.status = BlockedStatus(str(err))
+            return
 
-    def _validate(self):
+    def _validate(self):  # noqa: C901
         """Validate that configuration and relations are valid and ready.
 
         Raises:
@@ -80,7 +89,19 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if log_level not in VALID_LOG_LEVELS:
             raise ValueError(f"config: invalid log level {log_level!r}")
 
+        if not self._state.is_ready():
+            raise ValueError("peer relation not ready")
+
         self._check_required_config(REQUIRED_CHARM_CONFIG)
+
+        if self._state.supported_workflows is None or len(self._state.supported_workflows) == 0:
+            raise ValueError("Invalid state: must have at least one supported workflow")
+
+        if self._state.supported_activities is None or len(self._state.supported_activities) == 0:
+            raise ValueError("Invalid state: must have at least one supported activity")
+
+        if self._state.module_name is None:
+            raise ValueError("Invalid state: error extracting folder name from wheel file")
 
         if self.config["auth-enabled"]:
             if not self.config["auth-provider"]:
@@ -94,6 +115,60 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
             if self.config["auth-provider"] == "google":
                 self._check_required_config(REQUIRED_OIDC_CONFIG)
+
+    def _process_wheel_file(self, event):
+        """Process wheel file attached by user.
+
+        This method extracts the wheel file provided by the user and places the contents
+        into the workload container, which can then be read by the Temporal worker.
+
+        Args:
+            event: The event triggered when the relation changed.
+
+        Raises:
+            ValueError: if file is not found.
+        """
+        if not self._state.is_ready():
+            event.defer()
+            return
+
+        if self.unit.is_leader():
+            self._state.module_name = None
+
+        try:
+            resource_path = self.model.resources.fetch("workflows-file")
+
+            container = self.unit.get_container(self.name)
+            if not container.can_connect():
+                event.defer()
+                self.unit.status = WaitingStatus("waiting for pebble api")
+                return
+
+            container.exec(["rm", "-rf", "/user_provided"]).wait_output()
+
+            with open(resource_path, "rb") as file:
+                wheel_data = file.read()
+
+                # Push wheel file to the container and extract it.
+                container.push("/user_provided/wheel_file.whl", wheel_data, make_dirs=True)
+                container.exec(["apt-get", "update"]).wait_output()
+                container.exec(["apt-get", "install", "unzip"]).wait_output()
+                container.exec(["unzip", "/user_provided/wheel_file.whl", "-d", "/user_provided"]).wait_output()
+
+                # Find the name of the module provided by the user and set it in state.
+                command = "find /user_provided -mindepth 1 -maxdepth 1 -type d ! -name *.dist-info ! -name *.whl"
+                out, error = container.exec(command.split(" ")).wait_output()
+
+                if error is not None and error.strip() != "":
+                    raise ValueError("Invalid state: failed to extract module name from wheel file")
+
+                module_name = out.split("\n")
+                if self.unit.is_leader():
+                    self._state.module_name = module_name[0].split("/")[-1]
+
+        except ModelError as err:  # noqa: F841
+            logger.error(err)
+            raise ValueError("Invalid state: workflows-file resource not found") from err
 
     def _check_required_config(self, config_list):
         """Check if required config has been set by user.
@@ -123,6 +198,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         container = self.unit.get_container(self.name)
         if not container.can_connect():
             event.defer()
+            self.unit.status = WaitingStatus("waiting for pebble api")
             return
 
         # ensure the container is set up
@@ -130,12 +206,17 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         logger.info("Configuring Temporal worker")
 
+        module_name = self._state.module_name
+        sw = self._state.supported_workflows
+        sa = self._state.supported_activities
+        command = f"python worker.py '{json.dumps(dict(self.config))}' '{','.join(sw)}' '{','.join(sa)}' {module_name}"
+
         pebble_layer = {
             "summary": "temporal worker layer",
             "services": {
                 self.name: {
                     "summary": "temporal worker",
-                    "command": f"python worker.py '{json.dumps(dict(self.config))}'",
+                    "command": command,
                     "startup": "enabled",
                     "override": "replace",
                 }
@@ -157,30 +238,13 @@ def _setup_container(container: Container):
     resources_path = Path(__file__).parent / "resources"
     _push_container_file(container, resources_path, "/worker.py", resources_path / "worker.py")
     _push_container_file(
-        container,
-        resources_path,
-        "/temporal_client/__init__.py",
-        resources_path / "temporal_client/__init__.py",
-    )
-    _push_container_file(
-        container,
-        resources_path,
-        "/temporal_client/workflows.py",
-        resources_path / "temporal_client/workflows.py",
-    )
-    _push_container_file(
-        container,
-        resources_path,
-        "/temporal_client/activities.py",
-        resources_path / "temporal_client/activities.py",
+        container, resources_path, "/worker-dependencies.txt", resources_path / "worker-dependencies.txt"
     )
 
     # Install worker dependencies
-    worker_dependencies_path = resources_path / "worker-dependencies.txt"
-    with open(worker_dependencies_path, "r") as dependencies_file:
-        dependencies = dependencies_file.read().split("\n")
-        logger.info(f"installing worker dependencies {dependencies}...")
-        container.exec(["pip", "install", *dependencies]).wait()
+    worker_dependencies_path = "/worker-dependencies.txt"
+    logger.info("installing worker dependencies...")
+    container.exec(["pip", "install", "-r", str(worker_dependencies_path)]).wait_output()
 
 
 def _push_container_file(container: Container, src_path, dest_path, resource):
