@@ -38,22 +38,3 @@ remove-activities:
 
 list-activities:
   description: Return list of activities supported by worker.
-
-add-dependencies:
-  description: Add to the list of dependencies installed on the workload container.
-  params:
-    dependencies:
-      type: string
-      description: comma-separated list of dependency names.
-  required: [dependencies]
-
-remove-dependencies:
-  description: Remove from the list of dependencies installed on the workload container.
-  params:
-    dependencies:
-      type: string
-      description: comma-separated list of dependency names.
-  required: [dependencies]
-
-list-dependencies:
-  description: Return list of dependencies installed on the workload container.
