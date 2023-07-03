@@ -8,8 +8,10 @@
 
 import json
 import logging
+import re
 from pathlib import Path
 
+from dotenv import dotenv_values
 from ops import main
 from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, Container, ModelError, WaitingStatus
@@ -42,13 +44,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self._state = State(self.app, lambda: self.model.get_relation("peer"))
         self.name = "temporal-worker"
 
-        if self.unit.is_leader():
-            if self._state.supported_workflows is None:
-                self._state.supported_workflows = []
-            
-            if self._state.supported_activities is None:
-                self._state.supported_activities = []
-
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.temporal_worker_pebble_ready, self._on_temporal_worker_pebble_ready)
 
@@ -62,6 +57,16 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         Args:
             event: The event triggered when the relation changed.
         """
+        if not self._state.is_ready():
+            event.defer()
+            return
+
+        if self.unit.is_leader():
+            if self._state.supported_workflows is None:
+                self._state.supported_workflows = []
+            if self._state.supported_activities is None:
+                self._state.supported_activities = []
+
         self._update(event)
 
     @log_event_handler(logger)
@@ -72,15 +77,116 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             event: The event triggered when the relation changed.
         """
         self.unit.status = WaitingStatus("configuring temporal worker")
+        self._update(event)
+
+    def _process_env_file(self, event):
+        """Process env file attached by user.
+
+        This method extracts the env file provided by the user and stores the data in the
+        charm's data bucket.
+
+        Args:
+            event: The event triggered when the relation changed.
+        """
         try:
-            self._process_wheel_file(event)
-            self._update(event)
-        except ValueError as err:
-            self.unit.status = BlockedStatus(str(err))
+            self._state.env = None
+            resource_path = self.model.resources.fetch("env-file")
+            env = dotenv_values(resource_path)
+            self._state.env = env
+        except ModelError as err:  # noqa: F841
+            logger.error(err)
+
+    def _process_wheel_file(self, event):  # noqa: C901
+        """Process wheel file attached by user.
+
+        This method extracts the wheel file provided by the user and places the contents
+        into the workload container, which can then be read by the Temporal worker.
+
+        Args:
+            event: The event triggered when the relation changed.
+
+        Raises:
+            ValueError: if file is not found.
+        """
+        if not self._state.is_ready():
+            event.defer()
             return
 
-    def _validate(self):  # noqa: C901
+        if self.unit.is_leader():
+            self._state.module_name = None
+
+        if self.config["workflows-file-name"].strip() == "":
+            raise ValueError("Invalid config: wheel-file-name missing")
+
+        if not _validate_wheel_name(self.config["workflows-file-name"]):
+            raise ValueError("Invalid config: invalid wheel-file-name")
+
+        try:
+            resource_path = self.model.resources.fetch("workflows-file")
+
+            container = self.unit.get_container(self.name)
+            if not container.can_connect():
+                event.defer()
+                self.unit.status = WaitingStatus("waiting for pebble api")
+                return
+
+            container.exec(["rm", "-rf", "/user_provided"]).wait_output()
+
+            with open(resource_path, "rb") as file:
+                wheel_data = file.read()
+
+                # Push wheel file to the container and extract it.
+                container.push("/user_provided/wheel_file.whl", wheel_data, make_dirs=True)
+                container.exec(["apt-get", "update"]).wait()
+                container.exec(["apt-get", "install", "unzip"]).wait()
+                container.exec(["unzip", "/user_provided/wheel_file.whl", "-d", "/user_provided"]).wait()
+
+                # Find the name of the module provided by the user and set it in state.
+                command = "find /user_provided -mindepth 1 -maxdepth 1 -type d ! -name *.dist-info ! -name *.whl"
+                out, error = container.exec(command.split(" ")).wait_output()
+
+                if error is not None and error.strip() != "":
+                    logger.error(f"failed to extract module name from wheel file: {error}")
+                    raise ValueError("Invalid state: failed to extract module name from wheel file")
+
+                module_name = out.split("\n")
+                if self.unit.is_leader():
+                    self._state.module_name = module_name[0].split("/")[-1]
+
+                # Rename wheel file to its original name and install it
+                container.exec(
+                    ["mv", "/user_provided/wheel_file.whl", f"/user_provided/{self.config['workflows-file-name']}"]
+                ).wait()
+                _, error = container.exec(
+                    ["pip", "install", f"/user_provided/{self.config['workflows-file-name']}"]
+                ).wait_output()
+
+                if error is not None and error.strip() != "" and not error.strip().startswith("WARNING"):
+                    logger.error(f"failed to install wheel file: {error}")
+                    raise ValueError("Invalid state: failed to install wheel file")
+
+        except ModelError as err:  # noqa: F841
+            logger.error(err)
+            raise ValueError("Invalid state: workflows-file resource not found") from err
+
+    def _check_required_config(self, config_list):
+        """Check if required config has been set by user.
+
+        Args:
+            config_list: list of required config parameters.
+
+        Raises:
+            ValueError: if any of the required config is not set.
+        """
+        for param in config_list:
+            if self.config[param].strip() == "":
+                raise ValueError(f"Invalid config: {param} value missing")
+
+    def _validate(self, event):  # noqa: C901
         """Validate that configuration and relations are valid and ready.
+
+        Args:
+            event: The event triggered when the relation changed.
 
         Raises:
             ValueError: in case of invalid configuration.
@@ -91,6 +197,9 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         if not self._state.is_ready():
             raise ValueError("peer relation not ready")
+
+        self._process_wheel_file(event)
+        self._process_env_file(event)
 
         self._check_required_config(REQUIRED_CHARM_CONFIG)
 
@@ -112,76 +221,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
             if self.config["auth-provider"] == "candid":
                 self._check_required_config(REQUIRED_CANDID_CONFIG)
-
-            if self.config["auth-provider"] == "google":
+            elif self.config["auth-provider"] == "google":
                 self._check_required_config(REQUIRED_OIDC_CONFIG)
-
-    def _process_wheel_file(self, event):
-        """Process wheel file attached by user.
-
-        This method extracts the wheel file provided by the user and places the contents
-        into the workload container, which can then be read by the Temporal worker.
-
-        Args:
-            event: The event triggered when the relation changed.
-
-        Raises:
-            ValueError: if file is not found.
-        """
-        if not self._state.is_ready():
-            event.defer()
-            return
-
-        if self.unit.is_leader():
-            self._state.module_name = None
-
-        try:
-            resource_path = self.model.resources.fetch("workflows-file")
-
-            container = self.unit.get_container(self.name)
-            if not container.can_connect():
-                event.defer()
-                self.unit.status = WaitingStatus("waiting for pebble api")
-                return
-
-            container.exec(["rm", "-rf", "/user_provided"]).wait_output()
-
-            with open(resource_path, "rb") as file:
-                wheel_data = file.read()
-
-                # Push wheel file to the container and extract it.
-                container.push("/user_provided/wheel_file.whl", wheel_data, make_dirs=True)
-                container.exec(["apt-get", "update"]).wait_output()
-                container.exec(["apt-get", "install", "unzip"]).wait_output()
-                container.exec(["unzip", "/user_provided/wheel_file.whl", "-d", "/user_provided"]).wait_output()
-
-                # Find the name of the module provided by the user and set it in state.
-                command = "find /user_provided -mindepth 1 -maxdepth 1 -type d ! -name *.dist-info ! -name *.whl"
-                out, error = container.exec(command.split(" ")).wait_output()
-
-                if error is not None and error.strip() != "":
-                    raise ValueError("Invalid state: failed to extract module name from wheel file")
-
-                module_name = out.split("\n")
-                if self.unit.is_leader():
-                    self._state.module_name = module_name[0].split("/")[-1]
-
-        except ModelError as err:  # noqa: F841
-            logger.error(err)
-            raise ValueError("Invalid state: workflows-file resource not found") from err
-
-    def _check_required_config(self, config_list):
-        """Check if required config has been set by user.
-
-        Args:
-            config_list: list of required config parameters.
-
-        Raises:
-            ValueError: if any of the required config is not set.
-        """
-        for param in config_list:
-            if self.config[param].strip() == "":
-                raise ValueError(f"Invalid config: {param} value missing")
 
     def _update(self, event):
         """Update the Temporal worker configuration and replan its execution.
@@ -190,7 +231,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             event: The event triggered when the relation changed.
         """
         try:
-            self._validate()
+            self._validate(event)
         except ValueError as err:
             self.unit.status = BlockedStatus(str(err))
             return
@@ -219,6 +260,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                     "command": command,
                     "startup": "enabled",
                     "override": "replace",
+                    "environment": self._state.env or {},
                 }
             },
         }
@@ -227,6 +269,20 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         container.replan()
 
         self.unit.status = ActiveStatus()
+
+
+def _validate_wheel_name(filename):
+    """Validate wheel file name.
+
+    Args:
+        filename: Name of the wheel file.
+
+    Returns:
+        True if the file name is valid, False otherwise.
+    """
+    # Define a whitelist of allowed characters and patterns
+    allowed_pattern = r"^[a-zA-Z0-9-._]+-[a-zA-Z0-9_.]+-([a-zA-Z0-9_.]+|any|py2.py3)-(none|linux|macosx|win)-(any|any|intel|amd64)\.whl$"
+    return bool(re.search(allowed_pattern, filename))
 
 
 def _setup_container(container: Container):

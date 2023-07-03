@@ -1,6 +1,7 @@
 # Contributing
 
-To make contributions to this charm, you'll need a working [development setup](https://juju.is/docs/sdk/dev-setup).
+To make contributions to this charm, you'll need a working
+[development setup](https://juju.is/docs/sdk/dev-setup).
 
 You can create an environment for development with `tox`:
 
@@ -11,8 +12,9 @@ source venv/bin/activate
 
 ## Testing
 
-This project uses `tox` for managing test environments. There are some pre-configured environments
-that can be used for linting and formatting code when you're preparing contributions to the charm:
+This project uses `tox` for managing test environments. There are some
+pre-configured environments that can be used for linting and formatting code
+when you're preparing contributions to the charm:
 
 ```shell
 tox run -e format        # update your code according to linting rules
@@ -22,12 +24,61 @@ tox run -e integration   # integration tests
 tox                      # runs 'format', 'lint', and 'unit' environments
 ```
 
-## Build the charm
+### Deploy
 
-Build the charm in this git repository using:
+This charm is used to deploy Temporal server in a k8s cluster. For a local
+deployment, follow the following steps:
 
-```shell
-charmcraft pack
-```
+    # Install Microk8s from snap:
+    sudo snap install microk8s --classic --channel=1.24
 
-<!-- You may want to include any contribution/style guidelines in this document>
+    # Install charmcraft from snap:
+    sudo snap install charmcraft --classic
+
+    # Add the 'ubuntu' user to the Microk8s group:
+    sudo usermod -a -G microk8s ubuntu
+
+    # Give the 'ubuntu' user permissions to read the ~/.kube directory:
+    sudo chown -f -R ubuntu ~/.kube
+
+    # Create the 'microk8s' group:
+    newgrp microk8s
+
+    # Enable the necessary Microk8s addons:
+    microk8s enable hostpath-storage dns
+
+    # Install the Juju CLI client, juju:
+    sudo snap install juju --classic
+
+    # Install a "juju" controller into your "microk8s" cloud:
+    juju bootstrap microk8s temporal-controller
+
+    # Create a 'model' on this controller:
+    juju add-model temporal
+
+    # Enable DEBUG logging:
+    juju model-config logging-config="<root>=INFO;unit=DEBUG"
+
+    # Pack the charm:
+    charmcraft pack [--destructive-mode]
+
+    # Build wheel file:
+    cd resource_sample && poetry build -f wheel
+
+    # Deploy the charm:
+    juju deploy ./temporal-worker-k8s_ubuntu-22.04-amd64.charm --resource temporal-worker-image=python:3.8.2-slim-buster
+    juju config temporal-worker-k8s --file=path/to/config.yaml
+
+    # Attach wheel file resource:
+    juju attach-resource temporal-worker-k8s workflows-file=./resource_sample/dist/python_samples-1.1.0-py3-none-any.whl
+
+    # Add supported workflow and activity:
+    juju run temporal-worker-k8s/0 add-workflows workflows="GreetingWorkflow"
+    juju run temporal-worker-k8s/0 add-activities activities="compose_greeting"
+
+    # Check progress:
+    juju status --relations --watch 1s
+    juju debug-log
+
+    # Clean-up before retrying:
+    juju remove-application temporal-worker-k8s --force

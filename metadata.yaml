@@ -45,3 +45,7 @@ resources:
     type: file
     description: Wheel file containing Temporal workflows and activities.
     filename: 'workflows-file.whl'
+  env-file:
+    type: file
+    description: .env file containing environment variables to be sourced to the workload container.
+    filename: '.env'
