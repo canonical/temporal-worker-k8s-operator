@@ -25,6 +25,16 @@ juju deploy temporal-worker-k8s
 juju config temporal-worker-k8s --file=path/to/config.yaml
 ```
 
+#### **`config.yaml`**
+
+```yaml
+temporal-worker-k8s:
+  host: "localhost:7233" # Replace with Temporal server hostname
+  queue: "test-queue"
+  namespace: "test"
+  workflows-file-name: "python_samples-1.1.0-py3-none-any.whl"
+```
+
 ### Attaching "workflows-file" resource
 
 The Temporal worker operator expects a "workflows-file" resource to be attached
@@ -43,13 +53,13 @@ The structure of the built wheel file must follow the same structure:
 - some_helper_file.py
 ```
 
-The wheel file can be built by running `poetry build -f wheel` in the
+The sample wheel file can be built by running `poetry build -f wheel` in the
 [resource_sample](./resource_sample/) directory.
 
 Once ready, the resource can be attached as follows:
 
 ```bash
-juju attach-resource temporal-worker-k8s workflows-file=<path_to_wheel_file>
+juju attach-resource temporal-worker-k8s workflows-file=./resource_sample/dist/python_samples-1.1.0-py3-none-any.whl
 ```
 
 ### Defining supported workflows and activities

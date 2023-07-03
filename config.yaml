@@ -24,7 +24,12 @@ options:
     type: string
 
   queue:
-    description: Temporal task queue the worker should connect to
+    description: Temporal task queue the worker should connect to.
+    default: ""
+    type: string
+
+  workflows-file-name:
+    description: Name of the wheel file resource attached to the charm.
     default: ""
     type: string
 
