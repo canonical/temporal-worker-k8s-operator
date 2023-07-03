@@ -221,8 +221,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
             if self.config["auth-provider"] == "candid":
                 self._check_required_config(REQUIRED_CANDID_CONFIG)
-
-            if self.config["auth-provider"] == "google":
+            elif self.config["auth-provider"] == "google":
                 self._check_required_config(REQUIRED_OIDC_CONFIG)
 
     def _update(self, event):
