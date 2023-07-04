@@ -88,8 +88,14 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         Args:
             event: The event triggered when the relation changed.
         """
-        try:
+        if not self._state.is_ready():
+            event.defer()
+            return
+
+        if self.unit.is_leader():
             self._state.env = None
+
+        try:
             resource_path = self.model.resources.fetch("env-file")
             env = dotenv_values(resource_path)
             self._state.env = env
@@ -123,6 +129,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         try:
             resource_path = self.model.resources.fetch("workflows-file")
+            filename = str(resource_path).rsplit("/", maxsplit=1)
 
             container = self.unit.get_container(self.name)
             if not container.can_connect():
@@ -136,10 +143,10 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 wheel_data = file.read()
 
                 # Push wheel file to the container and extract it.
-                container.push("/user_provided/wheel_file.whl", wheel_data, make_dirs=True)
+                container.push(f"/user_provided/{filename}", wheel_data, make_dirs=True)
                 container.exec(["apt-get", "update"]).wait()
                 container.exec(["apt-get", "install", "unzip"]).wait()
-                container.exec(["unzip", "/user_provided/wheel_file.whl", "-d", "/user_provided"]).wait()
+                container.exec(["unzip", f"/user_provided/{filename}", "-d", "/user_provided"]).wait()
 
                 # Find the name of the module provided by the user and set it in state.
                 command = "find /user_provided -mindepth 1 -maxdepth 1 -type d ! -name *.dist-info ! -name *.whl"
@@ -151,11 +158,11 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
                 module_name = out.split("\n")
                 if self.unit.is_leader():
-                    self._state.module_name = module_name[0].split("/")[-1]
+                    self._state.module_name = module_name[0].rsplit("/", maxsplit=1)
 
                 # Rename wheel file to its original name and install it
                 container.exec(
-                    ["mv", "/user_provided/wheel_file.whl", f"/user_provided/{self.config['workflows-file-name']}"]
+                    ["mv", f"/user_provided/{filename}", f"/user_provided/{self.config['workflows-file-name']}"]
                 ).wait()
                 _, error = container.exec(
                     ["pip", "install", f"/user_provided/{self.config['workflows-file-name']}"]
@@ -243,7 +250,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             return
 
         # ensure the container is set up
-        _setup_container(container)
+        self._setup_container(container)
 
         logger.info("Configuring Temporal worker")
 
@@ -270,6 +277,23 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         self.unit.status = ActiveStatus()
 
+    def _setup_container(self, container: Container):
+        """Copy worker file to the container and install dependencies.
+
+        Args:
+            container: Container unit on which to perform action.
+        """
+        resources_path = Path(__file__).parent / "resources"
+        _push_container_file(container, resources_path, "/worker.py", resources_path / "worker.py")
+        _push_container_file(
+            container, resources_path, "/worker-dependencies.txt", resources_path / "worker-dependencies.txt"
+        )
+
+        # Install worker dependencies
+        worker_dependencies_path = "/worker-dependencies.txt"
+        logger.info("installing worker dependencies...")
+        container.exec(["pip", "install", "-r", str(worker_dependencies_path)]).wait_output()
+
 
 def _validate_wheel_name(filename):
     """Validate wheel file name.
@@ -283,24 +307,6 @@ def _validate_wheel_name(filename):
     # Define a whitelist of allowed characters and patterns
     allowed_pattern = r"^[a-zA-Z0-9-._]+-[a-zA-Z0-9_.]+-([a-zA-Z0-9_.]+|any|py2.py3)-(none|linux|macosx|win)-(any|any|intel|amd64)\.whl$"
     return bool(re.search(allowed_pattern, filename))
-
-
-def _setup_container(container: Container):
-    """Copy worker file to the container and install dependencies.
-
-    Args:
-        container: Container unit on which to perform action.
-    """
-    resources_path = Path(__file__).parent / "resources"
-    _push_container_file(container, resources_path, "/worker.py", resources_path / "worker.py")
-    _push_container_file(
-        container, resources_path, "/worker-dependencies.txt", resources_path / "worker-dependencies.txt"
-    )
-
-    # Install worker dependencies
-    worker_dependencies_path = "/worker-dependencies.txt"
-    logger.info("installing worker dependencies...")
-    container.exec(["pip", "install", "-r", str(worker_dependencies_path)]).wait_output()
 
 
 def _push_container_file(container: Container, src_path, dest_path, resource):

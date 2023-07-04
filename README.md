@@ -91,6 +91,14 @@ To run a basic workflow, you may use a simple client (e.g.
 connect to the same Temporal server. If run on the same namespace and task queue
 as the Temporal worker, it should be executed successfully.
 
+## Scaling
+
+To add more replicas you can use the juju scale-application functionality i.e.
+
+```
+juju scale-application temporal-worker-k8s <num_of_replicas_required_replicas>
+```
+
 ## Contributing
 
 This charm is still in active development. Please see the

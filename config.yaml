@@ -39,9 +39,9 @@ options:
     type: string
 
   auth-enabled:
-      description: Determines if authentication is enabled or not.
-      default: False
-      type: boolean    
+    description: Determines if authentication is enabled or not.
+    default: False
+    type: boolean
 
   auth-provider:
     description: |
