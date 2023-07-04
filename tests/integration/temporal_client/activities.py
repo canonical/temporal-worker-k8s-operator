@@ -16,8 +16,8 @@ class ComposeGreetingInput:
     """GreetingInput class.
 
     Attrs:
-        greeting: blah.
-        name: blah.
+        greeting: greeting input.
+        name: name input.
     """
 
     greeting: str
