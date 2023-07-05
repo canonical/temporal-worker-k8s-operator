@@ -16,6 +16,7 @@ description: |
 maintainers: 
   - Commercial Systems <jaas-crew@lists.canonical.com>
 source: https://github.com/canonical/temporal-worker-k8s-operator
+docs: https://github.com/canonical/temporal-worker-k8s-operator
 tags:
   - temporal
   - workflow
