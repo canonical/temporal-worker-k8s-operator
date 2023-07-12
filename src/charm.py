@@ -270,7 +270,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         self.unit.status = ActiveStatus()
 
-def _setup_container(self, container: Container):
+
+def _setup_container(container: Container):
     """Copy worker file to the container and install dependencies.
 
     Args:
@@ -287,6 +288,7 @@ def _setup_container(self, container: Container):
     logger.info("installing worker dependencies...")
     container.exec(["pip", "install", "-r", str(worker_dependencies_path)]).wait_output()
 
+
 def _validate_wheel_name(filename):
     """Validate wheel file name.
 
@@ -299,6 +301,7 @@ def _validate_wheel_name(filename):
     # Define an allowed list of allowed characters and patterns
     allowed_pattern = r"^[a-zA-Z0-9-._]+-[a-zA-Z0-9_.]+-([a-zA-Z0-9_.]+|any|py2.py3)-(none|linux|macosx|win)-(any|any|intel|amd64)\.whl$"
     return bool(re.match(allowed_pattern, filename))
+
 
 def _push_container_file(container: Container, src_path, dest_path, resource):
     """Copy worker file to the container and install dependencies.
