@@ -243,7 +243,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             return
 
         # ensure the container is set up
-        self._setup_container(container)
+        _setup_container(container)
 
         logger.info("Configuring Temporal worker")
 
@@ -270,22 +270,22 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         self.unit.status = ActiveStatus()
 
-    def _setup_container(self, container: Container):
-        """Copy worker file to the container and install dependencies.
+def _setup_container(self, container: Container):
+    """Copy worker file to the container and install dependencies.
 
-        Args:
-            container: Container unit on which to perform action.
-        """
-        resources_path = Path(__file__).parent / "resources"
-        _push_container_file(container, resources_path, "/worker.py", resources_path / "worker.py")
-        _push_container_file(
-            container, resources_path, "/worker-dependencies.txt", resources_path / "worker-dependencies.txt"
-        )
+    Args:
+        container: Container unit on which to perform action.
+    """
+    resources_path = Path(__file__).parent / "resources"
+    _push_container_file(container, resources_path, "/worker.py", resources_path / "worker.py")
+    _push_container_file(
+        container, resources_path, "/worker-dependencies.txt", resources_path / "worker-dependencies.txt"
+    )
 
-        # Install worker dependencies
-        worker_dependencies_path = "/worker-dependencies.txt"
-        logger.info("installing worker dependencies...")
-        container.exec(["pip", "install", "-r", str(worker_dependencies_path)]).wait_output()
+    # Install worker dependencies
+    worker_dependencies_path = "/worker-dependencies.txt"
+    logger.info("installing worker dependencies...")
+    container.exec(["pip", "install", "-r", str(worker_dependencies_path)]).wait_output()
 
 def _validate_wheel_name(filename):
     """Validate wheel file name.
