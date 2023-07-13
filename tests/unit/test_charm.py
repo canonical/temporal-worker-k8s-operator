@@ -55,7 +55,7 @@ class TestCharm(TestCase):
         self.assertEqual(harness.model.unit.status, BlockedStatus("Invalid config: host value missing"))
 
     @mock.patch("charm.TemporalWorkerK8SOperatorCharm._process_wheel_file")
-    @mock.patch("charm.TemporalWorkerK8SOperatorCharm._setup_container")
+    @mock.patch("charm._setup_container")
     def test_ready(self, _process_wheel_file, _setup_container):
         """The charm is blocked without a admin:temporal relation with a ready schema."""
         harness = self.harness
