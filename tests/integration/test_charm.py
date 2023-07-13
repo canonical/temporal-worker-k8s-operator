@@ -4,32 +4,24 @@
 
 """Temporal worker charm integration tests."""
 
-import asyncio
 import logging
-from pathlib import Path
 
 import pytest
-import yaml
+from conftest import deploy  # noqa: F401, pylint: disable=W0611
+from helpers import run_sample_workflow
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
-APP_NAME = METADATA["name"]
 
-
+# Skipped until local resources are supported:
+# https://pythonlibjuju.readthedocs.io/en/latest/api/juju.model.html?highlight=deploy#juju.model.Model.deploy
+@pytest.mark.skip
 @pytest.mark.abort_on_fail
-async def test_build_and_deploy(ops_test: OpsTest):
-    """Build the charm-under-test and deploy it together with related charms.
+@pytest.mark.usefixtures("deploy")
+class TestDeployment:
+    """Integration tests for Temporal charm."""
 
-    Assert on the unit status before any relations/configurations take place.
-    """
-    # Build and deploy charm from local source folder
-    charm = await ops_test.build_charm(".")
-    resources = {"httpbin-image": METADATA["resources"]["httpbin-image"]["upstream-source"]}
-
-    # Deploy the charm and wait for active/idle status
-    await asyncio.gather(
-        ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME),
-        ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", raise_on_blocked=True, timeout=1000),
-    )
+    async def test_basic_client(self, ops_test: OpsTest):
+        """Connects a client and runs a basic Temporal workflow."""
+        await run_sample_workflow(ops_test)
