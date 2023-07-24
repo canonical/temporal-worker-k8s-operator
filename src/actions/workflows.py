@@ -53,7 +53,6 @@ class WorkflowsActions(framework.Object):
 
         event.set_results({"result": "command succeeded", "supported-workflows": self.charm._state.supported_workflows})
 
-        # TODO(kelkawi-a): add peer_relation_changed hook to update other units
         self.charm._update(event)
 
     @log_event_handler(logger)
