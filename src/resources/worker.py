@@ -7,6 +7,7 @@
 
 import asyncio
 import glob
+import inspect
 import json
 import os
 import sys
@@ -78,9 +79,18 @@ def _import_modules(module_type, module_name, supported_modules):
         module_name = file_name[:-3]
         module = import_module(module_name)
 
-        for sm in supported_modules:
-            if hasattr(module, sm):
-                module_list.append(getattr(module, sm))
+        if "all" in supported_modules:
+            for _, obj in inspect.getmembers(module):
+                if module_type == "workflows":
+                    if inspect.isclass(obj) and inspect.getmodule(obj) is module:
+                        module_list.append(obj)
+                else:
+                    if inspect.isfunction(obj) and inspect.getmodule(obj) is module:
+                        module_list.append(obj)
+        else:
+            for sm in supported_modules:
+                if hasattr(module, sm):
+                    module_list.append(getattr(module, sm))
 
     return module_list
 

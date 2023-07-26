@@ -44,6 +44,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self._state = State(self.app, lambda: self.model.get_relation("peer"))
         self.name = "temporal-worker"
 
+        self.framework.observe(self.on.peer_relation_changed, self._on_peer_relation_changed)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.temporal_worker_pebble_ready, self._on_temporal_worker_pebble_ready)
 
@@ -70,6 +71,15 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self._update(event)
 
     @log_event_handler(logger)
+    def _on_peer_relation_changed(self, event):
+        """Handle peer relation changed event.
+
+        Args:
+            event: The event triggered when the relation changed.
+        """
+        self._update(event)
+
+    @log_event_handler(logger)
     def _on_config_changed(self, event):
         """Handle configuration changes.
 
@@ -88,12 +98,18 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         Args:
             event: The event triggered when the relation changed.
         """
-        try:
+        if not self._state.is_ready():
+            event.defer()
+            return
+
+        if self.unit.is_leader():
             self._state.env = None
+
+        try:
             resource_path = self.model.resources.fetch("env-file")
             env = dotenv_values(resource_path)
             self._state.env = env
-        except ModelError as err:  # noqa: F841
+        except ModelError as err:
             logger.error(err)
 
     def _process_wheel_file(self, event):  # noqa: C901
@@ -123,6 +139,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         try:
             resource_path = self.model.resources.fetch("workflows-file")
+            filename = Path(resource_path).name
 
             container = self.unit.get_container(self.name)
             if not container.can_connect():
@@ -136,10 +153,10 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 wheel_data = file.read()
 
                 # Push wheel file to the container and extract it.
-                container.push("/user_provided/wheel_file.whl", wheel_data, make_dirs=True)
+                container.push(f"/user_provided/{filename}", wheel_data, make_dirs=True)
                 container.exec(["apt-get", "update"]).wait()
                 container.exec(["apt-get", "install", "unzip"]).wait()
-                container.exec(["unzip", "/user_provided/wheel_file.whl", "-d", "/user_provided"]).wait()
+                container.exec(["unzip", f"/user_provided/{filename}", "-d", "/user_provided"]).wait()
 
                 # Find the name of the module provided by the user and set it in state.
                 command = "find /user_provided -mindepth 1 -maxdepth 1 -type d ! -name *.dist-info ! -name *.whl"
@@ -149,13 +166,23 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                     logger.error(f"failed to extract module name from wheel file: {error}")
                     raise ValueError("Invalid state: failed to extract module name from wheel file")
 
-                module_name = out.split("\n")
+                directories = out.split("\n")
+                module_name = Path(directories[0]).name
+
                 if self.unit.is_leader():
-                    self._state.module_name = module_name[0].split("/")[-1]
+                    self._state.module_name = module_name
+
+                command = f"find /user_provided/{module_name} -mindepth 1 -maxdepth 1 -type d"
+                out, _ = container.exec(command.split(" ")).wait_output()
+                provided_directories = out.split("\n")
+                required_directories = ["workflows", "activities"]
+                for d in required_directories:
+                    if f"/user_provided/{module_name}/{d}" not in provided_directories:
+                        raise ValueError(f"Invalid state: {d} directory not found in attached resource")
 
                 # Rename wheel file to its original name and install it
                 container.exec(
-                    ["mv", "/user_provided/wheel_file.whl", f"/user_provided/{self.config['workflows-file-name']}"]
+                    ["mv", f"/user_provided/{filename}", f"/user_provided/{self.config['workflows-file-name']}"]
                 ).wait()
                 _, error = container.exec(
                     ["pip", "install", f"/user_provided/{self.config['workflows-file-name']}"]
@@ -165,7 +192,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                     logger.error(f"failed to install wheel file: {error}")
                     raise ValueError("Invalid state: failed to install wheel file")
 
-        except ModelError as err:  # noqa: F841
+        except ModelError as err:
             logger.error(err)
             raise ValueError("Invalid state: workflows-file resource not found") from err
 
@@ -258,7 +285,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 self.name: {
                     "summary": "temporal worker",
                     "command": command,
-                    "startup": "enabled",
+                    "startup": "disabled",
                     "override": "replace",
                     "environment": self._state.env or {},
                 }
@@ -266,7 +293,10 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         }
 
         container.add_layer(self.name, pebble_layer, combine=True)
-        container.replan()
+        if container.get_service(self.name).is_running():
+            container.replan()
+        else:
+            container.start(self.name)
 
         self.unit.status = ActiveStatus()
 
