@@ -25,13 +25,13 @@ logger = logging.getLogger(__name__)
 
 @pytest.mark.skip_if_deployed
 @pytest_asyncio.fixture(name="deploy", scope="module")
-async def deploy(ops_test: OpsTest):
+async def deploy(ops_test: OpsTest, pytestconfig: pytest.Config):
     """Verify the app is up and running."""
-    charm = await ops_test.build_charm(".")
+    charm = pytestconfig.getoption("--charm-file")
     resources = {"temporal-worker-image": METADATA["containers"]["temporal-worker"]["upstream-source"]}
 
     # Deploy temporal server, temporal admin and postgresql charms.
-    await ops_test.model.deploy(charm, resources=resources, config=WORKER_CONFIG, application_name=APP_NAME)
+    await ops_test.model.deploy(f"./{charm}", resources=resources, config=WORKER_CONFIG, application_name=APP_NAME)
     await ops_test.model.deploy(APP_NAME_SERVER, channel="edge")
     await ops_test.model.deploy(APP_NAME_ADMIN, channel="edge")
     await ops_test.model.deploy(APP_NAME_UI, channel="edge")

@@ -182,9 +182,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                         raise ValueError(f"Invalid state: {d} directory not found in attached resource")
 
                 # Rename wheel file to its original name and install it
-                container.exec(
-                    ["mv", wheel_file, f"/user_provided/{self.config['workflows-file-name']}"]
-                ).wait()
+                container.exec(["mv", wheel_file, f"/user_provided/{self.config['workflows-file-name']}"]).wait()
                 _, error = container.exec(
                     ["pip", "install", f"/user_provided/{self.config['workflows-file-name']}"]
                 ).wait_output()

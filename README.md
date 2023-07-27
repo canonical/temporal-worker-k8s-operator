@@ -1,3 +1,6 @@
+[![Charmhub Badge](https://charmhub.io/temporal-worker-k8s/badge.svg)](https://charmhub.io/temporal-worker-k8s)
+[![Release Edge](https://github.com/canonical/temporal-worker-k8s-operator/actions/workflows/publish_charm.yaml/badge.svg)](https://github.com/canonical/temporal-worker-k8s-operator/actions/workflows/publish_charm.yaml)
+
 # Temporal Worker K8s Operator
 
 This is the Kubernetes Python Operator for the Temporal worker.
