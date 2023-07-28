@@ -152,11 +152,14 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             with open(resource_path, "rb") as file:
                 wheel_data = file.read()
 
+                wheel_file = f"/user_provided/{filename}"
+                original_wheel_file = f"/user_provided/{self.config['workflows-file-name']}"
+
                 # Push wheel file to the container and extract it.
-                container.push(f"/user_provided/{filename}", wheel_data, make_dirs=True)
+                container.push(wheel_file, wheel_data, make_dirs=True)
                 container.exec(["apt-get", "update"]).wait()
                 container.exec(["apt-get", "install", "unzip"]).wait()
-                container.exec(["unzip", f"/user_provided/{filename}", "-d", "/user_provided"]).wait()
+                container.exec(["unzip", wheel_file, "-d", "/user_provided"]).wait()
 
                 # Find the name of the module provided by the user and set it in state.
                 command = "find /user_provided -mindepth 1 -maxdepth 1 -type d ! -name *.dist-info ! -name *.whl"
@@ -181,12 +184,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                         raise ValueError(f"Invalid state: {d} directory not found in attached resource")
 
                 # Rename wheel file to its original name and install it
-                container.exec(
-                    ["mv", f"/user_provided/{filename}", f"/user_provided/{self.config['workflows-file-name']}"]
-                ).wait()
-                _, error = container.exec(
-                    ["pip", "install", f"/user_provided/{self.config['workflows-file-name']}"]
-                ).wait_output()
+                container.exec(["mv", wheel_file, original_wheel_file]).wait()
+                _, error = container.exec(["pip", "install", original_wheel_file]).wait_output()
 
                 if error is not None and error.strip() != "" and not error.strip().startswith("WARNING"):
                     logger.error(f"failed to install wheel file: {error}")
