@@ -312,7 +312,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 self.name: {
                     "summary": "temporal worker",
                     "command": command,
-                    "startup": "disabled",
+                    "startup": "enabled",
                     "override": "replace",
                     "environment": self._state.env or {},
                 }
@@ -320,10 +320,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         }
 
         container.add_layer(self.name, pebble_layer, combine=True)
-        if container.get_service(self.name).is_running():
-            container.replan()
-        else:
-            container.start(self.name)
+        container.replan()
 
         self.unit.status = ActiveStatus(
             f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"

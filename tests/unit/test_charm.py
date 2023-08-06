@@ -101,7 +101,7 @@ class TestCharm(TestCase):
                 "temporal-worker": {
                     "summary": "temporal worker",
                     "command": command,
-                    "startup": "disabled",
+                    "startup": "enabled",
                     "override": "replace",
                 }
             },
