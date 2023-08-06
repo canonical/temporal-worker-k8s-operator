@@ -13,6 +13,8 @@ import os
 import sys
 from importlib import import_module
 
+import sentry_sdk
+from sentry_interceptor import SentryInterceptor
 from temporalio.worker import Worker
 from temporallib.auth import (
     AuthOptions,
@@ -120,7 +122,15 @@ async def run_worker(charm_config, supported_workflows, supported_activities, mo
         client_config.auth = AuthOptions(provider=charm_config["auth-provider"], config=_get_auth_header(charm_config))
 
     if charm_config["encryption-key"].strip() != "":
-        client_config.encryption = EncryptionOptions(key=charm_config["encryption-key"])
+        client_config.encryption = EncryptionOptions(key=charm_config["encryption-key"], compress=True)
+
+    interceptors = []
+    dsn = charm_config["sentry-dsn"].strip()
+    if dsn != "":
+        interceptors = [SentryInterceptor()]
+        sentry_sdk.init(
+            dsn=dsn,
+        )
 
     client = await Client.connect(client_config)
 
@@ -129,6 +139,7 @@ async def run_worker(charm_config, supported_workflows, supported_activities, mo
         task_queue=charm_config["queue"],
         workflows=workflows,
         activities=activities,
+        interceptors=interceptors,
     )
     await worker.run()
 

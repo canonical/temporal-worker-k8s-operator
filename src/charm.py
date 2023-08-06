@@ -14,7 +14,14 @@ from pathlib import Path
 from dotenv import dotenv_values
 from ops import main
 from ops.charm import CharmBase
-from ops.model import ActiveStatus, BlockedStatus, Container, ModelError, WaitingStatus
+from ops.model import (
+    ActiveStatus,
+    BlockedStatus,
+    Container,
+    MaintenanceStatus,
+    ModelError,
+    WaitingStatus,
+)
 
 from actions.activities import ActivitiesActions
 from actions.workflows import WorkflowsActions
@@ -47,6 +54,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self.framework.observe(self.on.peer_relation_changed, self._on_peer_relation_changed)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.temporal_worker_pebble_ready, self._on_temporal_worker_pebble_ready)
+        self.framework.observe(self.on.restart_action, self._on_restart)
 
         self.workflows_actions = WorkflowsActions(self)
         self.activities_actions = ActivitiesActions(self)
@@ -69,6 +77,26 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 self._state.supported_activities = []
 
         self._update(event)
+
+    @log_event_handler(logger)
+    def _on_restart(self, event):
+        """Restart Temporal worker action handler.
+
+        Args:
+            event:The event triggered by the restart action
+        """
+        container = self.unit.get_container(self.name)
+        if not container.can_connect():
+            event.defer()
+            return
+
+        self.unit.status = MaintenanceStatus("restarting worker")
+        container.restart(self.name)
+        self.unit.status = ActiveStatus(
+            f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
+        )
+
+        event.set_results({"result": "worker successfully restarted"})
 
     @log_event_handler(logger)
     def _on_peer_relation_changed(self, event):
@@ -297,7 +325,9 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         else:
             container.start(self.name)
 
-        self.unit.status = ActiveStatus()
+        self.unit.status = ActiveStatus(
+            f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
+        )
 
 
 def _setup_container(container: Container):
@@ -307,7 +337,9 @@ def _setup_container(container: Container):
         container: Container unit on which to perform action.
     """
     resources_path = Path(__file__).parent / "resources"
+    _push_container_file(container, resources_path, "/__init__.py", resources_path / "__init__.py")
     _push_container_file(container, resources_path, "/worker.py", resources_path / "worker.py")
+    _push_container_file(container, resources_path, "/sentry_interceptor.py", resources_path / "sentry_interceptor.py")
     _push_container_file(
         container, resources_path, "/worker-dependencies.txt", resources_path / "worker-dependencies.txt"
     )
