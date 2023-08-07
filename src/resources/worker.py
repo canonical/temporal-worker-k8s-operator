@@ -130,6 +130,8 @@ async def run_worker(charm_config, supported_workflows, supported_activities, mo
         interceptors = [SentryInterceptor()]
         sentry_sdk.init(
             dsn=dsn,
+            release=charm_config["sentry-release"].strip() or None,
+            environment=charm_config["sentry-environment"].strip() or None,
         )
 
     client = await Client.connect(client_config)

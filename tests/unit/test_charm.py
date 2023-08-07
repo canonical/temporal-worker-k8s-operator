@@ -66,6 +66,8 @@ class TestCharm(TestCase):
             "namespace": "test-namespace",
             "queue": "test-queue",
             "sentry-dsn": "",
+            "sentry-release": "",
+            "sentry-environment": "",
             "workflows-file-name": "python_samples-1.1.0-py3-none-any.whl",
             "encryption-key": "",
             "auth-enabled": True,
