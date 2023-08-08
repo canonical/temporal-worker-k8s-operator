@@ -334,9 +334,7 @@ def _setup_container(container: Container):
         container: Container unit on which to perform action.
     """
     resources_path = Path(__file__).parent / "resources"
-    _push_container_file(container, resources_path, "/__init__.py", resources_path / "__init__.py")
     _push_container_file(container, resources_path, "/worker.py", resources_path / "worker.py")
-    _push_container_file(container, resources_path, "/sentry_interceptor.py", resources_path / "sentry_interceptor.py")
     _push_container_file(
         container, resources_path, "/worker-dependencies.txt", resources_path / "worker-dependencies.txt"
     )
