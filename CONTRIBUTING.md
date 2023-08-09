@@ -72,10 +72,6 @@ deployment, follow the following steps:
     # Attach wheel file resource:
     juju attach-resource temporal-worker-k8s workflows-file=./resource_sample/dist/python_samples-1.1.0-py3-none-any.whl
 
-    # Add supported workflow and activity:
-    juju run temporal-worker-k8s/0 add-workflows workflows="GreetingWorkflow"
-    juju run temporal-worker-k8s/0 add-activities activities="compose_greeting"
-
     # Check progress:
     juju status --relations --watch 1s
     juju debug-log

@@ -1,53 +1,5 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-add-workflows:
-  description: | 
-    Add to the list of workflows supported by worker. This can either be
-    done by specifying class names of the Temporal workflow definitions
-    (marked by @workflow.defn), or using the keyword "all" to include
-    all classes inside the "workflows" directory.
-  
-  params:
-    workflows:
-      type: string
-      description: comma-separated list of workflow names.
-  required: [workflows]
-
-remove-workflows:
-  description: Remove from the list of workflows supported by worker.
-  params:
-    workflows:
-      type: string
-      description: comma-separated list of workflow names.
-  required: [workflows]
-
-list-workflows:
-  description: Return list of workflows supported by worker.
-
-add-activities:
-  description: | 
-    Add to the list of activities supported by worker. This can either be
-    done by specifying method names of the Temporal activity definitions
-    (marked by @activity.defn), or using the keyword "all" to include
-    all methods inside the "activities" directory.
-  
-  params:
-    activities:
-      type: string
-      description: comma-separated list of activity names.
-  required: [activities]
-
-remove-activities:
-  description: Remove from the list of activities supported by worker.
-  params:
-    activities:
-      type: string
-      description: comma-separated list of activity names.
-  required: [activities]
-
-list-activities:
-  description: Return list of activities supported by worker.
-
 restart:
   description: Restart the Temporal worker.

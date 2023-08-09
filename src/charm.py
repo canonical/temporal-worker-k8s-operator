@@ -23,8 +23,6 @@ from ops.model import (
     WaitingStatus,
 )
 
-from actions.activities import ActivitiesActions
-from actions.workflows import WorkflowsActions
 from literals import (
     REQUIRED_CANDID_CONFIG,
     REQUIRED_CHARM_CONFIG,
@@ -56,9 +54,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self.framework.observe(self.on.temporal_worker_pebble_ready, self._on_temporal_worker_pebble_ready)
         self.framework.observe(self.on.restart_action, self._on_restart)
 
-        self.workflows_actions = WorkflowsActions(self)
-        self.activities_actions = ActivitiesActions(self)
-
     @log_event_handler(logger)
     def _on_temporal_worker_pebble_ready(self, event):
         """Define and start temporal using the Pebble API.
@@ -69,12 +64,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if not self._state.is_ready():
             event.defer()
             return
-
-        if self.unit.is_leader():
-            if self._state.supported_workflows is None:
-                self._state.supported_workflows = []
-            if self._state.supported_activities is None:
-                self._state.supported_activities = []
 
         self._update(event)
 
@@ -257,12 +246,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         self._check_required_config(REQUIRED_CHARM_CONFIG)
 
-        if self._state.supported_workflows is None or len(self._state.supported_workflows) == 0:
-            raise ValueError("Invalid state: must have at least one supported workflow")
-
-        if self._state.supported_activities is None or len(self._state.supported_activities) == 0:
-            raise ValueError("Invalid state: must have at least one supported activity")
-
         if self._state.module_name is None:
             raise ValueError("Invalid state: error extracting folder name from wheel file")
 
@@ -302,9 +285,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         logger.info("Configuring Temporal worker")
 
         module_name = self._state.module_name
-        sw = self._state.supported_workflows
-        sa = self._state.supported_activities
-        command = f"python worker.py '{json.dumps(dict(self.config))}' '{','.join(sw)}' '{','.join(sa)}' {module_name}"
+        command = f"python worker.py '{json.dumps(dict(self.config))}' {module_name}"
 
         pebble_layer = {
             "summary": "temporal worker layer",

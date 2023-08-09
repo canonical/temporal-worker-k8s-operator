@@ -89,19 +89,17 @@ def _import_modules(module_type, module_name, supported_modules):
                         module_list.append(obj)
         else:
             for sm in supported_modules:
-                if hasattr(module, sm):
-                    module_list.append(getattr(module, sm))
+                if hasattr(module, sm.strip()):
+                    module_list.append(getattr(module, sm.strip()))
 
     return module_list
 
 
-async def run_worker(charm_config, supported_workflows, supported_activities, module_name):
+async def run_worker(charm_config, module_name):
     """Connect Temporal worker to Temporal server.
 
     Args:
         charm_config: Charm config containing worker options.
-        supported_workflows: Comma-separated list of workflows supported by the worker.
-        supported_activities: Comma-separated list of activities supported by the worker.
         module_name: Parent module name extracted from wheel file.
     """
     client_config = Options(
@@ -110,8 +108,12 @@ async def run_worker(charm_config, supported_workflows, supported_activities, mo
         queue=charm_config["queue"],
     )
 
-    workflows = _import_modules("workflows", module_name=module_name, supported_modules=supported_workflows)
-    activities = _import_modules("activities", module_name=module_name, supported_modules=supported_activities)
+    workflows = _import_modules(
+        "workflows", module_name=module_name, supported_modules=charm_config["supported-workflows"].split(",")
+    )
+    activities = _import_modules(
+        "activities", module_name=module_name, supported_modules=charm_config["supported-activities"].split(",")
+    )
 
     if charm_config["tls-root-cas"].strip() != "":
         client_config.tls_root_cas = charm_config["tls-root-cas"]
@@ -145,8 +147,6 @@ async def run_worker(charm_config, supported_workflows, supported_activities, mo
 
 if __name__ == "__main__":  # pragma: nocover
     cfg = json.loads(sys.argv[1])
-    state_workflows = sys.argv[2].split(",")
-    state_activities = sys.argv[3].split(",")
-    mn = sys.argv[4]
+    mn = sys.argv[2]
 
-    asyncio.run(run_worker(cfg, state_workflows, state_activities, mn))
+    asyncio.run(run_worker(cfg, mn))
