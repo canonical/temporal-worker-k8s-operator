@@ -36,6 +36,9 @@ temporal-worker-k8s:
   queue: "test-queue"
   namespace: "test"
   workflows-file-name: "python_samples-1.1.0-py3-none-any.whl"
+  # To support all defined workflows and activities, use the 'all' keyword
+  supported-workflows: "all"
+  supported-activities: "all"
 ```
 
 ### Attaching "workflows-file" resource
@@ -63,21 +66,6 @@ Once ready, the resource can be attached as follows:
 
 ```bash
 juju attach-resource temporal-worker-k8s workflows-file=./resource_sample/dist/python_samples-1.1.0-py3-none-any.whl
-```
-
-### Defining supported workflows and activities
-
-Once the wheel file is processed by the worker to extract all the workflows and
-activities, a list of supported workflows and activities must be defined by the
-user before the charm can be started. This can be done as follows:
-
-```bash
-juju run temporal-worker-k8s/0 add-workflows workflows="GreetingWorkflow"
-juju run temporal-worker-k8s/0 add-activities activities="compose_greeting"
-
-# To support all defined workflows and activities, use the 'all' keyword
-juju run temporal-worker-k8s/0 add-workflows workflows="all"
-juju run temporal-worker-k8s/0 add-activities activities="all"
 ```
 
 Once done, the charm should enter an active state, indicating that the worker is
@@ -120,6 +108,8 @@ following command:
 
 ```bash
 juju config temporal-worker-k8s sentry-dsn=<YOUR_SENTRY_DSN>
+juju config temporal-worker-k8s sentry-release="1.0.0"
+juju config temporal-worker-k8s sentry-environment="staging"
 ```
 
 ## Contributing

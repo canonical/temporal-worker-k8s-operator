@@ -65,6 +65,8 @@ class TestCharm(TestCase):
             "host": "test-host",
             "namespace": "test-namespace",
             "queue": "test-queue",
+            "supported-workflows": "all",
+            "supported-activities": "all",
             "sentry-dsn": "",
             "sentry-release": "",
             "sentry-environment": "",
@@ -91,11 +93,9 @@ class TestCharm(TestCase):
         state = simulate_lifecycle(harness, config)
         harness.charm.on.config_changed.emit()
 
-        sw = json.loads(state["supported_workflows"])
-        sa = json.loads(state["supported_activities"])
         module_name = json.loads(state["module_name"])
 
-        command = f"python worker.py '{json.dumps(dict(config))}' '{','.join(sw)}' '{','.join(sa)}' {module_name}"
+        command = f"python worker.py '{json.dumps(dict(config))}' {module_name}"
 
         # The plan is generated after pebble is ready.
         want_plan = {

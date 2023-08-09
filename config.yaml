@@ -31,6 +31,16 @@ options:
     default: ""
     type: string
 
+  supported-workflows:
+    description: Comma-separated list of workflow names to extract from attached wheel file.
+    default: ""
+    type: string
+
+  supported-activities:
+    description: Comma-separated list of workflow activities to extract from attached wheel file.
+    default: ""
+    type: string
+
   sentry-dsn:
     description: Sentry Data Source Name to send events to.
     default: ""
