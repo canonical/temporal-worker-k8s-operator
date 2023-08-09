@@ -48,3 +48,6 @@ remove-activities:
 
 list-activities:
   description: Return list of activities supported by worker.
+
+restart:
+  description: Restart the Temporal worker.

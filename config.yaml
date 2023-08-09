@@ -31,6 +31,21 @@ options:
     default: ""
     type: string
 
+  sentry-dsn:
+    description: Sentry Data Source Name to send events to.
+    default: ""
+    type: string
+
+  sentry-release:
+    description: The version of your code deployed to an environment.
+    default: ""
+    type: string
+
+  sentry-environment:
+    description: The environment to log errors to in Sentry.
+    default: ""
+    type: string
+
   workflows-file-name:
     description: Name of the wheel file resource attached to the charm.
     default: ""

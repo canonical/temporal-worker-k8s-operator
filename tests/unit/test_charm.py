@@ -65,6 +65,9 @@ class TestCharm(TestCase):
             "host": "test-host",
             "namespace": "test-namespace",
             "queue": "test-queue",
+            "sentry-dsn": "",
+            "sentry-release": "",
+            "sentry-environment": "",
             "workflows-file-name": "python_samples-1.1.0-py3-none-any.whl",
             "encryption-key": "",
             "auth-enabled": True,
@@ -92,8 +95,6 @@ class TestCharm(TestCase):
         sa = json.loads(state["supported_activities"])
         module_name = json.loads(state["module_name"])
 
-        self.assertEqual(harness.model.unit.status, ActiveStatus())
-
         command = f"python worker.py '{json.dumps(dict(config))}' '{','.join(sw)}' '{','.join(sa)}' {module_name}"
 
         # The plan is generated after pebble is ready.
@@ -102,7 +103,7 @@ class TestCharm(TestCase):
                 "temporal-worker": {
                     "summary": "temporal worker",
                     "command": command,
-                    "startup": "disabled",
+                    "startup": "enabled",
                     "override": "replace",
                 }
             },
@@ -114,8 +115,11 @@ class TestCharm(TestCase):
         service = harness.model.unit.get_container(CONTAINER_NAME).get_service("temporal-worker")
         self.assertTrue(service.is_running())
 
-        # The ActiveStatus is set with no message.
-        self.assertEqual(harness.model.unit.status, ActiveStatus())
+        # The ActiveStatus is set.
+        self.assertEqual(
+            harness.model.unit.status,
+            ActiveStatus(f"worker listening to namespace {config['namespace']!r} on queue {config['queue']!r}"),
+        )
 
 
 def simulate_lifecycle(harness, config):

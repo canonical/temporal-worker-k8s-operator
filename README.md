@@ -1,5 +1,5 @@
 [![Charmhub Badge](https://charmhub.io/temporal-worker-k8s/badge.svg)](https://charmhub.io/temporal-worker-k8s)
-[![Release Edge](https://github.com/canonical/temporal-worker-k8s-operator/actions/workflows/publish_charm.yaml/badge.svg)](https://github.com/canonical/temporal-worker-k8s-operator/actions/workflows/publish_charm.yaml)
+[![Release Edge](https://github.com/canonical/temporal-worker-k8s-operator/actions/workflows/test_and_publish_charm.yaml/badge.svg)](https://github.com/canonical/temporal-worker-k8s-operator/actions/workflows/test_and_publish_charm.yaml)
 
 # Temporal Worker K8s Operator
 
@@ -74,6 +74,10 @@ user before the charm can be started. This can be done as follows:
 ```bash
 juju run temporal-worker-k8s/0 add-workflows workflows="GreetingWorkflow"
 juju run temporal-worker-k8s/0 add-activities activities="compose_greeting"
+
+# To support all defined workflows and activities, use the 'all' keyword
+juju run temporal-worker-k8s/0 add-workflows workflows="all"
+juju run temporal-worker-k8s/0 add-activities activities="all"
 ```
 
 Once done, the charm should enter an active state, indicating that the worker is
@@ -83,6 +87,12 @@ pod to ensure there are no errors with the workload container:
 ```bash
 kubectl -n <juju_model_name> logs temporal-worker-k8s-0 -c temporal-worker -f
 ```
+
+Note: Files defined under the "workflows" directory must only contain classes
+decorated using the `@workflow.defn` decorator. Files defined under the
+"activities" directory must only contain methods decorated using the
+`@activity.defn` decorator. Any additional methods or classes needed should be
+defined in other files.
 
 ## Verifying
 
@@ -100,6 +110,16 @@ To add more replicas you can use the juju scale-application functionality i.e.
 
 ```
 juju scale-application temporal-worker-k8s <num_of_replicas_required_replicas>
+```
+
+## Error Monitoring
+
+The Temporal worker operator has a built-in Sentry interceptor which can be used
+to intercept and capture errors from the Temporal SDK. To enable it, run the
+following command:
+
+```bash
+juju config temporal-worker-k8s sentry-dsn=<YOUR_SENTRY_DSN>
 ```
 
 ## Contributing
