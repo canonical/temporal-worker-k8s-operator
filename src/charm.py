@@ -147,6 +147,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         if self.unit.is_leader():
             self._state.module_name = None
+            self._state.unpacked_file_name = None
 
         if self.config["workflows-file-name"].strip() == "":
             raise ValueError("Invalid config: wheel-file-name missing")
@@ -166,56 +167,30 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
             container.exec(["rm", "-rf", "/user_provided"]).wait_output()
 
+            wheel_file = f"/user_provided/{filename}"
+            original_wheel_file = f"/user_provided/{self.config['workflows-file-name']}"
+            wheel_arr = self.config["workflows-file-name"].split("-")
+            unpacked_file_name = f"/user_provided/{'-'.join(wheel_arr[0:2])}"
+
             with open(resource_path, "rb") as file:
                 wheel_data = file.read()
-
-                wheel_file = f"/user_provided/{filename}"
-                original_wheel_file = f"/user_provided/{self.config['workflows-file-name']}"
 
                 # Push wheel file to the container and extract it.
                 container.push(wheel_file, wheel_data, make_dirs=True)
 
-                # Rename wheel file to its original name and install it
-                container.exec(["mv", wheel_file, original_wheel_file]).wait()
+            # Rename wheel file to its original name and install it
+            container.exec(["mv", wheel_file, original_wheel_file]).wait()
 
-                _, error = container.exec(["pip", "install", original_wheel_file]).wait_output()
-                if error is not None and error.strip() != "" and not error.strip().startswith("WARNING"):
-                    logger.error(f"failed to install wheel file: {error}")
-                    raise ValueError("Invalid state: failed to install wheel file")
+            _install_wheel_file(container=container, wheel_file_name=original_wheel_file)
+            _unpack_wheel_file(container=container, wheel_file_name=original_wheel_file)
+            module_name = _get_module_name(container=container, unpacked_file_name=unpacked_file_name)
+            _check_required_directories(
+                container=container, unpacked_file_name=unpacked_file_name, module_name=module_name
+            )
 
-                # Unpack wheel file
-                container.exec(["pip", "install", "wheel"]).wait()
-                _, error = container.exec(
-                    ["wheel", "unpack", original_wheel_file, "-d", "/user_provided"]
-                ).wait_output()
-                if error is not None and error.strip() != "" and not error.strip().startswith("WARNING"):
-                    logger.error(f"failed to unpack wheel file: {error}")
-                    raise ValueError("Invalid state: failed to unpack wheel file")
-
-                wheel_arr = self.config["workflows-file-name"].split("-")
-                unpacked_file_name = f"/user_provided/{'-'.join(wheel_arr[0:2])}"
-
-                # Find the name of the module provided by the user and set it in state.
-                command = f"find {unpacked_file_name} -mindepth 1 -maxdepth 1 -type d ! -name *.dist-info ! -name *.whl"
-                out, error = container.exec(command.split(" ")).wait_output()
-
-                if error is not None and error.strip() != "":
-                    logger.error(f"failed to extract module name from wheel file: {error}")
-                    raise ValueError("Invalid state: failed to extract module name from wheel file")
-
-                directories = out.split("\n")
-                module_name = Path(directories[0]).name
-
-                if self.unit.is_leader():
-                    self._state.module_name = module_name
-
-                command = f"find {unpacked_file_name}/{module_name} -mindepth 1 -maxdepth 1 -type d"
-                out, _ = container.exec(command.split(" ")).wait_output()
-                provided_directories = out.split("\n")
-                required_directories = ["workflows", "activities"]
-                for d in required_directories:
-                    if f"{unpacked_file_name}/{module_name}/{d}" not in provided_directories:
-                        raise ValueError(f"Invalid state: {d} directory not found in attached resource")
+            if self.unit.is_leader():
+                self._state.module_name = module_name
+                self._state.unpacked_file_name = unpacked_file_name
 
         except ModelError as err:
             logger.error(err)
@@ -294,7 +269,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         logger.info("Configuring Temporal worker")
 
         module_name = self._state.module_name
-        command = f"python worker.py '{json.dumps(dict(self.config))}' {module_name}"
+        unpacked_file_name = self._state.unpacked_file_name
+        command = f"python worker.py '{json.dumps(dict(self.config))}' {unpacked_file_name} {module_name}"
 
         pebble_layer = {
             "summary": "temporal worker layer",
@@ -362,6 +338,83 @@ def _push_container_file(container: Container, src_path, dest_path, resource):
     with open(source_path, "r") as file_source:
         logger.info(f"pushing {resource} source...")
         container.push(dest_path, file_source, make_dirs=True)
+
+
+def _install_wheel_file(container: Container, wheel_file_name: str):
+    """Install named wheel file on container.
+
+    Args:
+        container: Container unit on which to perform action.
+        wheel_file_name: name of wheel file to install.
+
+    Raises:
+        ValueError: if wheel file fails to install.
+    """
+    _, error = container.exec(["pip", "install", wheel_file_name]).wait_output()
+    if error is not None and error.strip() != "" and not error.strip().startswith("WARNING"):
+        logger.error(f"failed to install wheel file: {error}")
+        raise ValueError("Invalid state: failed to install wheel file")
+
+
+def _unpack_wheel_file(container: Container, wheel_file_name: str):
+    """Unpack named wheel file on container.
+
+    Args:
+        container: Container unit on which to perform action.
+        wheel_file_name: name of wheel file to unpack.
+
+    Raises:
+        ValueError: if wheel unpacking fails.
+    """
+    _, error = container.exec(["wheel", "unpack", wheel_file_name, "-d", "/user_provided"]).wait_output()
+    if error is not None and error.strip() != "" and not error.strip().startswith("WARNING"):
+        logger.error(f"failed to unpack wheel file: {error}")
+        raise ValueError("Invalid state: failed to unpack wheel file")
+
+
+def _get_module_name(container: Container, unpacked_file_name: str):
+    """Get module name from unpacked wheel file.
+
+    Args:
+        container: Container unit on which to perform action.
+        unpacked_file_name: Name of wheel file after unpacking.
+
+    Returns:
+        Name of module provided by the user.
+
+    Raises:
+        ValueError: if module name extraction fails.
+    """
+    # Find the name of the module provided by the user and set it in state.
+    command = f"find {unpacked_file_name} -mindepth 1 -maxdepth 1 -type d ! -name *.dist-info ! -name *.whl"
+    out, error = container.exec(command.split(" ")).wait_output()
+
+    if error is not None and error.strip() != "":
+        logger.error(f"failed to extract module name from wheel file: {error}")
+        raise ValueError("Invalid state: failed to extract module name from wheel file")
+
+    directories = out.split("\n")
+    return Path(directories[0]).name
+
+
+def _check_required_directories(container: Container, unpacked_file_name: str, module_name: str):
+    """Verify that the required workflows and activities directories are present.
+
+    Args:
+        container: Container unit on which to perform action.
+        unpacked_file_name: Name of wheel file after unpacking.
+        module_name: Name of module provided by user.
+
+    Raises:
+        ValueError: if required directories are not found in attached resource.
+    """
+    command = f"find {unpacked_file_name}/{module_name} -mindepth 1 -maxdepth 1 -type d"
+    out, _ = container.exec(command.split(" ")).wait_output()
+    provided_directories = out.split("\n")
+    required_directories = ["workflows", "activities"]
+    for d in required_directories:
+        if f"{unpacked_file_name}/{module_name}/{d}" not in provided_directories:
+            raise ValueError(f"Invalid state: {d} directory not found in attached resource")
 
 
 if __name__ == "__main__":  # pragma: nocover

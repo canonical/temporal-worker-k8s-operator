@@ -1,2 +1,3 @@
-temporal-lib-py==1.1.1
+temporal-lib-py==1.1.2
 protobuf==3.20.0
+wheel==0.41.2

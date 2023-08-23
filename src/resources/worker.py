@@ -57,19 +57,19 @@ def _get_auth_header(charm_config):
     return None
 
 
-def _import_modules(module_type, module_name, supported_modules):
+def _import_modules(module_type, unpacked_file_name, module_name, supported_modules):
     """Extract supported workflows and activities .
 
     Args:
         module_type: "workflows" or "activities".
+        unpacked_file_name: Name of unpacked wheel file.
         module_name: Parent module name extracted from wheel file.
         supported_modules: list of supported modules to be extracted from module file.
 
     Returns:
         List of supported module references extracted from .py file.
     """
-    folder_name = "user_provided"
-    folder_path = os.path.join(os.getcwd(), folder_name, module_name, module_type)
+    folder_path = os.path.join(os.getcwd(), unpacked_file_name, module_name, module_type)
     sys.path.append(folder_path)
     file_names = glob.glob(f"{folder_path}/*.py")
     file_names = [os.path.basename(file) for file in file_names]
@@ -95,11 +95,12 @@ def _import_modules(module_type, module_name, supported_modules):
     return module_list
 
 
-async def run_worker(charm_config, module_name):
+async def run_worker(charm_config, unpacked_file_name, module_name):
     """Connect Temporal worker to Temporal server.
 
     Args:
         charm_config: Charm config containing worker options.
+        unpacked_file_name: Name of unpacked wheel file.
         module_name: Parent module name extracted from wheel file.
     """
     client_config = Options(
@@ -109,10 +110,16 @@ async def run_worker(charm_config, module_name):
     )
 
     workflows = _import_modules(
-        "workflows", module_name=module_name, supported_modules=charm_config["supported-workflows"].split(",")
+        "workflows",
+        unpacked_file_name=unpacked_file_name,
+        module_name=module_name,
+        supported_modules=charm_config["supported-workflows"].split(","),
     )
     activities = _import_modules(
-        "activities", module_name=module_name, supported_modules=charm_config["supported-activities"].split(",")
+        "activities",
+        unpacked_file_name=unpacked_file_name,
+        module_name=module_name,
+        supported_modules=charm_config["supported-activities"].split(","),
     )
 
     if charm_config["tls-root-cas"].strip() != "":
@@ -124,7 +131,7 @@ async def run_worker(charm_config, module_name):
     if charm_config["encryption-key"].strip() != "":
         client_config.encryption = EncryptionOptions(key=charm_config["encryption-key"], compress=True)
 
-    sentry = None
+    worker_opt = None
     dsn = charm_config["sentry-dsn"].strip()
     if dsn != "":
         sentry = SentryOptions(
@@ -133,6 +140,8 @@ async def run_worker(charm_config, module_name):
             environment=charm_config["sentry-environment"].strip() or None,
         )
 
+        worker_opt = WorkerOptions(sentry=sentry)
+
     client = await Client.connect(client_config)
 
     worker = Worker(
@@ -140,13 +149,14 @@ async def run_worker(charm_config, module_name):
         task_queue=charm_config["queue"],
         workflows=workflows,
         activities=activities,
-        worker_opt=WorkerOptions(sentry=sentry),
+        worker_opt=worker_opt,
     )
     await worker.run()
 
 
 if __name__ == "__main__":  # pragma: nocover
     cfg = json.loads(sys.argv[1])
-    mn = sys.argv[2]
+    upn = sys.argv[2]
+    mn = sys.argv[3]
 
-    asyncio.run(run_worker(cfg, mn))
+    asyncio.run(run_worker(cfg, upn, mn))
