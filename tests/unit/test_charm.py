@@ -94,8 +94,9 @@ class TestCharm(TestCase):
         harness.charm.on.config_changed.emit()
 
         module_name = json.loads(state["module_name"])
+        unpacked_file_name = json.loads(state["unpacked_file_name"])
 
-        command = f"python worker.py '{json.dumps(dict(config))}' {module_name}"
+        command = f"python worker.py '{json.dumps(dict(config))}' {unpacked_file_name} {module_name}"
 
         # The plan is generated after pebble is ready.
         want_plan = {
@@ -149,6 +150,7 @@ def simulate_lifecycle(harness, config):
             "supported_workflows": json.dumps(["TestWorkflow"]),
             "supported_activities": json.dumps(["test_activity"]),
             "module_name": json.dumps("python_samples"),
+            "unpacked_file_name": json.dumps("python_sample-0.1.0"),
         },
     )
 
