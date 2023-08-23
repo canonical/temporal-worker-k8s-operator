@@ -174,12 +174,29 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
                 # Push wheel file to the container and extract it.
                 container.push(wheel_file, wheel_data, make_dirs=True)
-                container.exec(["apt-get", "update"]).wait()
-                container.exec(["apt-get", "install", "unzip"]).wait()
-                container.exec(["unzip", wheel_file, "-d", "/user_provided"]).wait()
+
+                # Rename wheel file to its original name and install it
+                container.exec(["mv", wheel_file, original_wheel_file]).wait()
+
+                _, error = container.exec(["pip", "install", original_wheel_file]).wait_output()
+                if error is not None and error.strip() != "" and not error.strip().startswith("WARNING"):
+                    logger.error(f"failed to install wheel file: {error}")
+                    raise ValueError("Invalid state: failed to install wheel file")
+
+                # Unpack wheel file
+                container.exec(["pip", "install", "wheel"]).wait()
+                _, error = container.exec(
+                    ["wheel", "unpack", original_wheel_file, "-d", "/user_provided"]
+                ).wait_output()
+                if error is not None and error.strip() != "" and not error.strip().startswith("WARNING"):
+                    logger.error(f"failed to unpack wheel file: {error}")
+                    raise ValueError("Invalid state: failed to unpack wheel file")
+
+                wheel_arr = self.config["workflows-file-name"].split("-")
+                unpacked_file_name = f"/user_provided/{'-'.join(wheel_arr[0:2])}"
 
                 # Find the name of the module provided by the user and set it in state.
-                command = "find /user_provided -mindepth 1 -maxdepth 1 -type d ! -name *.dist-info ! -name *.whl"
+                command = f"find {unpacked_file_name} -mindepth 1 -maxdepth 1 -type d ! -name *.dist-info ! -name *.whl"
                 out, error = container.exec(command.split(" ")).wait_output()
 
                 if error is not None and error.strip() != "":
@@ -192,21 +209,13 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 if self.unit.is_leader():
                     self._state.module_name = module_name
 
-                command = f"find /user_provided/{module_name} -mindepth 1 -maxdepth 1 -type d"
+                command = f"find {unpacked_file_name}/{module_name} -mindepth 1 -maxdepth 1 -type d"
                 out, _ = container.exec(command.split(" ")).wait_output()
                 provided_directories = out.split("\n")
                 required_directories = ["workflows", "activities"]
                 for d in required_directories:
-                    if f"/user_provided/{module_name}/{d}" not in provided_directories:
+                    if f"{unpacked_file_name}/{module_name}/{d}" not in provided_directories:
                         raise ValueError(f"Invalid state: {d} directory not found in attached resource")
-
-                # Rename wheel file to its original name and install it
-                container.exec(["mv", wheel_file, original_wheel_file]).wait()
-                _, error = container.exec(["pip", "install", original_wheel_file]).wait_output()
-
-                if error is not None and error.strip() != "" and not error.strip().startswith("WARNING"):
-                    logger.error(f"failed to install wheel file: {error}")
-                    raise ValueError("Invalid state: failed to install wheel file")
 
         except ModelError as err:
             logger.error(err)
