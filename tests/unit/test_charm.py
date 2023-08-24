@@ -89,6 +89,9 @@ class TestCharm(TestCase):
             "oidc-token-uri": "",
             "oidc-auth-cert-url": "",
             "oidc-client-cert-url": "",
+            "http-proxy": "proxy",
+            "https-proxy": "proxy",
+            "no-proxy": "none",
         }
         state = simulate_lifecycle(harness, config)
         harness.charm.on.config_changed.emit()
@@ -106,6 +109,11 @@ class TestCharm(TestCase):
                     "command": command,
                     "startup": "enabled",
                     "override": "replace",
+                    "environment": {
+                        "HTTP_PROXY": "proxy",
+                        "HTTPS_PROXY": "proxy",
+                        "NO_PROXY": "none",
+                    },
                 }
             },
         }
