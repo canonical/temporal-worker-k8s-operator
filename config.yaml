@@ -153,3 +153,18 @@ options:
     description: Client certificate URL for OIDC authentication.
     default: ""
     type: string
+
+  http-proxy:
+    description: Used to set HTTP_PROXY environment variable.
+    default: ""
+    type: string
+
+  https-proxy:
+    description: Used to set HTTPS_PROXY environment variable.
+    default: ""
+    type: string
+
+  no-proxy:
+    description: Used to set NO_PROXY environment variable.
+    default: ""
+    type: string

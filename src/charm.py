@@ -181,7 +181,9 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             # Rename wheel file to its original name and install it
             container.exec(["mv", wheel_file, original_wheel_file]).wait()
 
-            _install_wheel_file(container=container, wheel_file_name=original_wheel_file)
+            _install_wheel_file(
+                container=container, wheel_file_name=original_wheel_file, proxy=self.config["http-proxy"]
+            )
             _unpack_wheel_file(container=container, wheel_file_name=original_wheel_file)
             module_name = _get_module_name(container=container, unpacked_file_name=unpacked_file_name)
             _check_required_directories(
@@ -264,13 +266,21 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             return
 
         # ensure the container is set up
-        _setup_container(container)
+        _setup_container(container, self.config["http-proxy"])
 
         logger.info("Configuring Temporal worker")
 
         module_name = self._state.module_name
         unpacked_file_name = self._state.unpacked_file_name
         command = f"python worker.py '{json.dumps(dict(self.config))}' {unpacked_file_name} {module_name}"
+        env = self._state.env or {}
+        env.update(
+            {
+                "HTTP_PROXY": self.config["http-proxy"],
+                "HTTPS_PROXY": self.config["https-proxy"],
+                "NO_PROXY": self.config["no-proxy"],
+            }
+        )
 
         pebble_layer = {
             "summary": "temporal worker layer",
@@ -280,7 +290,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                     "command": command,
                     "startup": "enabled",
                     "override": "replace",
-                    "environment": self._state.env or {},
+                    "environment": env,
                 }
             },
         }
@@ -293,11 +303,12 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         )
 
 
-def _setup_container(container: Container):
+def _setup_container(container: Container, proxy: str):
     """Copy worker file to the container and install dependencies.
 
     Args:
         container: Container unit on which to perform action.
+        proxy: optional proxy value used in running pip command.
     """
     resources_path = Path(__file__).parent / "resources"
     _push_container_file(container, resources_path, "/worker.py", resources_path / "worker.py")
@@ -308,7 +319,12 @@ def _setup_container(container: Container):
     # Install worker dependencies
     worker_dependencies_path = "/worker-dependencies.txt"
     logger.info("installing worker dependencies...")
-    container.exec(["pip", "install", "-r", str(worker_dependencies_path)]).wait_output()
+
+    command = ["pip", "install", "-r", str(worker_dependencies_path)]
+    if proxy.strip() != "":
+        command.insert(2, f"--proxy={proxy}")
+
+    container.exec(command).wait_output()
 
 
 def _validate_wheel_name(filename):
@@ -340,17 +356,22 @@ def _push_container_file(container: Container, src_path, dest_path, resource):
         container.push(dest_path, file_source, make_dirs=True)
 
 
-def _install_wheel_file(container: Container, wheel_file_name: str):
+def _install_wheel_file(container: Container, wheel_file_name: str, proxy: str):
     """Install named wheel file on container.
 
     Args:
         container: Container unit on which to perform action.
         wheel_file_name: name of wheel file to install.
+        proxy: optional proxy used when installing wheel file.
 
     Raises:
         ValueError: if wheel file fails to install.
     """
-    _, error = container.exec(["pip", "install", wheel_file_name]).wait_output()
+    command = ["pip", "install", wheel_file_name]
+    if proxy.strip() != "":
+        command.insert(2, f"--proxy={proxy}")
+
+    _, error = container.exec(command).wait_output()
     if error is not None and error.strip() != "" and not error.strip().startswith("WARNING"):
         logger.error(f"failed to install wheel file: {error}")
         raise ValueError("Invalid state: failed to install wheel file")
