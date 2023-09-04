@@ -72,7 +72,6 @@ class TestCharm(TestCase):
             "sentry-environment": "",
             "workflows-file-name": "python_samples-1.1.0-py3-none-any.whl",
             "encryption-key": "",
-            "auth-enabled": True,
             "auth-provider": "candid",
             "tls-root-cas": "",
             "candid-url": "test-url",
@@ -99,7 +98,7 @@ class TestCharm(TestCase):
         module_name = json.loads(state["module_name"])
         unpacked_file_name = json.loads(state["unpacked_file_name"])
 
-        command = f"python worker.py '{json.dumps(dict(config))}' {unpacked_file_name} {module_name}"
+        command = f"python worker.py {unpacked_file_name} {module_name}"
 
         # The plan is generated after pebble is ready.
         want_plan = {
@@ -110,6 +109,36 @@ class TestCharm(TestCase):
                     "startup": "enabled",
                     "override": "replace",
                     "environment": {
+                        "TWC_AUTH_PROVIDER": "candid",
+                        "TWC_CANDID_PRIVATE_KEY": "test-private-key",
+                        "TWC_CANDID_PUBLIC_KEY": "test-public-key",
+                        "TWC_CANDID_URL": "test-url",
+                        "TWC_CANDID_USERNAME": "test-username",
+                        "TWC_ENCRYPTION_KEY": "",
+                        "TWC_HOST": "test-host",
+                        "TWC_HTTPS_PROXY": "proxy",
+                        "TWC_HTTP_PROXY": "proxy",
+                        "TWC_LOG_LEVEL": "debug",
+                        "TWC_NAMESPACE": "test-namespace",
+                        "TWC_NO_PROXY": "none",
+                        "TWC_OIDC_AUTH_CERT_URL": "",
+                        "TWC_OIDC_AUTH_TYPE": "",
+                        "TWC_OIDC_AUTH_URI": "",
+                        "TWC_OIDC_CLIENT_CERT_URL": "",
+                        "TWC_OIDC_CLIENT_EMAIL": "",
+                        "TWC_OIDC_CLIENT_ID": "",
+                        "TWC_OIDC_PRIVATE_KEY": "",
+                        "TWC_OIDC_PRIVATE_KEY_ID": "",
+                        "TWC_OIDC_PROJECT_ID": "",
+                        "TWC_OIDC_TOKEN_URI": "",
+                        "TWC_QUEUE": "test-queue",
+                        "TWC_SENTRY_DSN": "",
+                        "TWC_SENTRY_ENVIRONMENT": "",
+                        "TWC_SENTRY_RELEASE": "",
+                        "TWC_SUPPORTED_ACTIVITIES": "all",
+                        "TWC_SUPPORTED_WORKFLOWS": "all",
+                        "TWC_TLS_ROOT_CAS": "",
+                        "TWC_WORKFLOWS_FILE_NAME": "python_samples-1.1.0-py3-none-any.whl",
                         "HTTP_PROXY": "proxy",
                         "HTTPS_PROXY": "proxy",
                         "NO_PROXY": "none",

@@ -66,11 +66,6 @@ options:
     default: ""
     type: string
 
-  auth-enabled:
-    description: Determines if authentication is enabled or not.
-    default: False
-    type: boolean
-
   auth-provider:
     description: |
       Authentication provider for user authentication.

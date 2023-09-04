@@ -2,10 +2,18 @@ name: Integration tests
 
 on:
   pull_request:
+  workflow_call:
 
 jobs:
   integration-test-microk8s:
     name: Integration tests (microk8s)
+    strategy:
+      fail-fast: false
+      matrix:
+        tox-environments:
+          - integration-charm
+          - integration-scaling
+          - integration-upgrades
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -13,15 +21,10 @@ jobs:
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
         with:
-          juju-channel: 3.1/stable
+          juju-channel: 3.2/stable
           provider: microk8s
+          microk8s-addons: "ingress storage dns rbac registry"
           channel: 1.25-strict/stable
       - name: Run integration tests
         # set a predictable model name so it can be consumed by charm-logdump-action
-        run: tox -e integration -- --model testing
-      - name: Dump logs
-        uses: canonical/charm-logdump-action@main
-        if: failure()
-        with:
-          app: temporal-worker-k8s
-          model: testing
+        run: tox -e ${{ matrix.tox-environments }}

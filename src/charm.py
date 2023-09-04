@@ -6,7 +6,6 @@
 
 """Charm definition and helpers."""
 
-import json
 import logging
 import re
 from pathlib import Path
@@ -114,6 +113,9 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         Args:
             event: The event triggered when the relation changed.
+
+        Raises:
+            ValueError: if env file contains variable starting with reserved prefix.
         """
         if not self._state.is_ready():
             event.defer()
@@ -125,7 +127,13 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         try:
             resource_path = self.model.resources.fetch("env-file")
             env = dotenv_values(resource_path)
-            self._state.env = env
+
+            for key, _ in env.items():
+                if key.startswith("TWC_"):
+                    raise ValueError("Invalid state: 'TWC_' env variable prefix is reserved")
+
+            if self.unit.is_leader():
+                self._state.env = env
         except ModelError as err:
             logger.error(err)
 
@@ -139,7 +147,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             event: The event triggered when the relation changed.
 
         Raises:
-            ValueError: if file is not found.
+            ValueError: if file is not found or an operation failed while extracting.
         """
         if not self._state.is_ready():
             event.defer()
@@ -179,7 +187,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 container.push(wheel_file, wheel_data, make_dirs=True)
 
             # Rename wheel file to its original name and install it
-            container.exec(["mv", wheel_file, original_wheel_file]).wait()
+            if wheel_file != original_wheel_file:
+                container.exec(["mv", wheel_file, original_wheel_file]).wait()
 
             _install_wheel_file(
                 container=container, wheel_file_name=original_wheel_file, proxy=self.config["http-proxy"]
@@ -235,10 +244,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if self._state.module_name is None:
             raise ValueError("Invalid state: error extracting folder name from wheel file")
 
-        if self.config["auth-enabled"]:
-            if not self.config["auth-provider"]:
-                raise ValueError("Invalid config: auth-provider value missing")
-
+        if self.config["auth-provider"]:
             if not self.config["auth-provider"] in SUPPORTED_AUTH_PROVIDERS:
                 raise ValueError("Invalid config: auth-provider not supported")
 
@@ -272,9 +278,15 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         module_name = self._state.module_name
         unpacked_file_name = self._state.unpacked_file_name
-        command = f"python worker.py '{json.dumps(dict(self.config))}' {unpacked_file_name} {module_name}"
-        env = self._state.env or {}
-        env.update(
+
+        context = {}
+        if self._state.env:
+            context.update(self._state.env)
+
+        context.update({convert_env_var(key): value for key, value in self.config.items()})
+        command = f"python worker.py {unpacked_file_name} {module_name}"
+
+        context.update(
             {
                 "HTTP_PROXY": self.config["http-proxy"],
                 "HTTPS_PROXY": self.config["https-proxy"],
@@ -290,7 +302,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                     "command": command,
                     "startup": "enabled",
                     "override": "replace",
-                    "environment": env,
+                    "environment": context,
                 }
             },
         }
@@ -301,6 +313,20 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self.unit.status = ActiveStatus(
             f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
         )
+
+
+def convert_env_var(config_var, prefix="TWC_"):
+    """Convert config parameter to environment variable with prefix.
+
+    Args:
+        config_var: Configuration parameter to convert.
+        prefix: A prefix to be added to the converted variable name.
+
+    Returns:
+        Converted environment variable.
+    """
+    converted_env_var = config_var.upper().replace("-", "_")
+    return prefix + converted_env_var
 
 
 def _setup_container(container: Container, proxy: str):
