@@ -6,7 +6,6 @@
 
 """Charm definition and helpers."""
 
-import json
 import logging
 import re
 from pathlib import Path
@@ -49,7 +48,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self._state = State(self.app, lambda: self.model.get_relation("peer"))
         self.name = "temporal-worker"
 
-        self.framework.observe(self.on.peer_relation_changed, self._on_peer_relation_changed)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.temporal_worker_pebble_ready, self._on_temporal_worker_pebble_ready)
         self.framework.observe(self.on.restart_action, self._on_restart)
@@ -88,15 +86,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         event.set_results({"result": "worker successfully restarted"})
 
     @log_event_handler(logger)
-    def _on_peer_relation_changed(self, event):
-        """Handle peer relation changed event.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        self._update(event)
-
-    @log_event_handler(logger)
     def _on_config_changed(self, event):
         """Handle configuration changes.
 
@@ -114,6 +103,9 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         Args:
             event: The event triggered when the relation changed.
+
+        Raises:
+            ValueError: if env file contains variable starting with reserved prefix.
         """
         if not self._state.is_ready():
             event.defer()
@@ -125,7 +117,13 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         try:
             resource_path = self.model.resources.fetch("env-file")
             env = dotenv_values(resource_path)
-            self._state.env = env
+
+            for key, _ in env.items():
+                if key.startswith("TWC_"):
+                    raise ValueError("Invalid state: 'TWC_' env variable prefix is reserved")
+
+            if self.unit.is_leader():
+                self._state.env = env
         except ModelError as err:
             logger.error(err)
 
@@ -139,15 +137,11 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             event: The event triggered when the relation changed.
 
         Raises:
-            ValueError: if file is not found.
+            ValueError: if file is not found or an operation failed while extracting.
         """
         if not self._state.is_ready():
             event.defer()
             return
-
-        if self.unit.is_leader():
-            self._state.module_name = None
-            self._state.unpacked_file_name = None
 
         if self.config["workflows-file-name"].strip() == "":
             raise ValueError("Invalid config: wheel-file-name missing")
@@ -179,7 +173,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 container.push(wheel_file, wheel_data, make_dirs=True)
 
             # Rename wheel file to its original name and install it
-            container.exec(["mv", wheel_file, original_wheel_file]).wait()
+            if wheel_file != original_wheel_file:
+                container.exec(["mv", wheel_file, original_wheel_file]).wait()
 
             _install_wheel_file(
                 container=container, wheel_file_name=original_wheel_file, proxy=self.config["http-proxy"]
@@ -235,10 +230,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if self._state.module_name is None:
             raise ValueError("Invalid state: error extracting folder name from wheel file")
 
-        if self.config["auth-enabled"]:
-            if not self.config["auth-provider"]:
-                raise ValueError("Invalid config: auth-provider value missing")
-
+        if self.config["auth-provider"]:
             if not self.config["auth-provider"] in SUPPORTED_AUTH_PROVIDERS:
                 raise ValueError("Invalid config: auth-provider not supported")
 
@@ -272,9 +264,15 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         module_name = self._state.module_name
         unpacked_file_name = self._state.unpacked_file_name
-        command = f"python worker.py '{json.dumps(dict(self.config))}' {unpacked_file_name} {module_name}"
-        env = self._state.env or {}
-        env.update(
+
+        context = {}
+        if self._state.env:
+            context.update(self._state.env)
+
+        context.update({convert_env_var(key): value for key, value in self.config.items()})
+        command = f"python worker.py {unpacked_file_name} {module_name}"
+
+        context.update(
             {
                 "HTTP_PROXY": self.config["http-proxy"],
                 "HTTPS_PROXY": self.config["https-proxy"],
@@ -290,7 +288,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                     "command": command,
                     "startup": "enabled",
                     "override": "replace",
-                    "environment": env,
+                    "environment": context,
                 }
             },
         }
@@ -303,12 +301,29 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         )
 
 
+def convert_env_var(config_var, prefix="TWC_"):
+    """Convert config parameter to environment variable with prefix.
+
+    Args:
+        config_var: Configuration parameter to convert.
+        prefix: A prefix to be added to the converted variable name.
+
+    Returns:
+        Converted environment variable.
+    """
+    converted_env_var = config_var.upper().replace("-", "_")
+    return prefix + converted_env_var
+
+
 def _setup_container(container: Container, proxy: str):
     """Copy worker file to the container and install dependencies.
 
     Args:
         container: Container unit on which to perform action.
         proxy: optional proxy value used in running pip command.
+
+    Raises:
+        ValueError: if worker dependencies fail to install.
     """
     resources_path = Path(__file__).parent / "resources"
     _push_container_file(container, resources_path, "/worker.py", resources_path / "worker.py")
@@ -324,7 +339,10 @@ def _setup_container(container: Container, proxy: str):
     if proxy.strip() != "":
         command.insert(2, f"--proxy={proxy}")
 
-    container.exec(command).wait_output()
+    _, error = container.exec(command).wait_output()
+    if error is not None and error.strip() != "" and not error.strip().startswith("WARNING"):
+        logger.error(f"failed to install worker dependencies: {error}")
+        raise ValueError("Invalid state: failed to install worker dependencies")
 
 
 def _validate_wheel_name(filename):

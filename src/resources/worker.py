@@ -8,7 +8,6 @@
 import asyncio
 import glob
 import inspect
-import json
 import os
 import sys
 from importlib import import_module
@@ -24,34 +23,31 @@ from temporallib.encryption import EncryptionOptions
 from temporallib.worker import SentryOptions, Worker, WorkerOptions
 
 
-def _get_auth_header(charm_config):
+def _get_auth_header():
     """Get auth options based on provider.
-
-    Args:
-        charm_config: Charm config containing worker options.
 
     Returns:
         AuthOptions object.
     """
-    if charm_config["auth-provider"] == "candid":
+    if os.getenv("TWC_AUTH_PROVIDER") == "candid":
         return MacaroonAuthOptions(
-            keys=KeyPair(private=charm_config["candid-private-key"], public=charm_config["candid-public-key"]),
-            macaroon_url=charm_config["candid-url"],
-            username=charm_config["candid-username"],
+            keys=KeyPair(private=os.getenv("TWC_CANDID_PRIVATE_KEY"), public=os.getenv("TWC_CANDID_PUBLIC_KEY")),
+            macaroon_url=os.getenv("TWC_CANDID_URL"),
+            username=os.getenv("TWC_CANDID_USERNAME"),
         )
 
-    if charm_config["auth-provider"] == "google":
+    if os.getenv("TWC_AUTH_PROVIDER") == "google":
         return GoogleAuthOptions(
             type="service_account",
-            project_id=charm_config["oidc-project-id"],
-            private_key_id=charm_config["oidc-private-key-id"],
-            private_key=charm_config["oidc-private-key"],
-            client_email=charm_config["oidc-client-email"],
-            client_id=charm_config["oidc-client-id"],
-            auth_uri=charm_config["oidc-auth-uri"],
-            token_uri=charm_config["oidc-token-uri"],
-            auth_provider_x509_cert_url=charm_config["oidc-auth-cert-url"],
-            client_x509_cert_url=charm_config["oidc-client-cert-url"],
+            project_id=os.getenv("TWC_OIDC_PROJECT_ID"),
+            private_key_id=os.getenv("TWC_OIDC_PRIVATE_KEY_ID"),
+            private_key=os.getenv("TWC_OIDC_PRIVATE_KEY"),
+            client_email=os.getenv("TWC_OIDC_CLIENT_EMAIL"),
+            client_id=os.getenv("TWC_OIDC_CLIENT_ID"),
+            auth_uri=os.getenv("TWC_OIDC_AUTH_URI"),
+            token_uri=os.getenv("TWC_OIDC_TOKEN_URI"),
+            auth_provider_x509_cert_url=os.getenv("TWC_OIDC_AUTH_CERT_URL"),
+            client_x509_cert_url=os.getenv("TWC_OIDC_CLIENT_CERT_URL"),
         )
 
     return None
@@ -95,49 +91,49 @@ def _import_modules(module_type, unpacked_file_name, module_name, supported_modu
     return module_list
 
 
-async def run_worker(charm_config, unpacked_file_name, module_name):
+async def run_worker(unpacked_file_name, module_name):
     """Connect Temporal worker to Temporal server.
 
     Args:
-        charm_config: Charm config containing worker options.
         unpacked_file_name: Name of unpacked wheel file.
         module_name: Parent module name extracted from wheel file.
     """
     client_config = Options(
-        host=charm_config["host"],
-        namespace=charm_config["namespace"],
-        queue=charm_config["queue"],
+        host=os.getenv("TWC_HOST"),
+        namespace=os.getenv("TWC_NAMESPACE"),
+        queue=os.getenv("TWC_QUEUE"),
     )
 
     workflows = _import_modules(
         "workflows",
         unpacked_file_name=unpacked_file_name,
         module_name=module_name,
-        supported_modules=charm_config["supported-workflows"].split(","),
+        supported_modules=os.getenv("TWC_SUPPORTED_WORKFLOWS").split(","),
     )
     activities = _import_modules(
         "activities",
         unpacked_file_name=unpacked_file_name,
         module_name=module_name,
-        supported_modules=charm_config["supported-activities"].split(","),
+        supported_modules=os.getenv("TWC_SUPPORTED_ACTIVITIES").split(","),
     )
 
-    if charm_config["tls-root-cas"].strip() != "":
-        client_config.tls_root_cas = charm_config["tls-root-cas"]
+    if os.getenv("TWC_TLS_ROOT_CAS").strip() != "":
+        client_config.tls_root_cas = os.getenv("TWC_TLS_ROOT_CAS")
 
-    if charm_config["auth-enabled"]:
-        client_config.auth = AuthOptions(provider=charm_config["auth-provider"], config=_get_auth_header(charm_config))
+    if os.getenv("TWC_AUTH_PROVIDER").strip() != "":
+        client_config.auth = AuthOptions(provider=os.getenv("TWC_AUTH_PROVIDER"), config=_get_auth_header())
 
-    if charm_config["encryption-key"].strip() != "":
-        client_config.encryption = EncryptionOptions(key=charm_config["encryption-key"], compress=True)
+    if os.getenv("TWC_ENCRYPTION_KEY").strip() != "":
+        client_config.encryption = EncryptionOptions(key=os.getenv("TWC_ENCRYPTION_KEY"), compress=True)
 
     worker_opt = None
-    dsn = charm_config["sentry-dsn"].strip()
+    dsn = os.getenv("TWC_SENTRY_DSN").strip()
     if dsn != "":
         sentry = SentryOptions(
             dsn=dsn,
-            release=charm_config["sentry-release"].strip() or None,
-            environment=charm_config["sentry-environment"].strip() or None,
+            release=os.getenv("TWC_SENTRY_RELEASE").strip() or None,
+            environment=os.getenv("TWC_SENTRY_ENVIRONMENT").strip() or None,
+            redact_params=os.getenv("TWC_SENTRY_REDACT_PARAMS"),
         )
 
         worker_opt = WorkerOptions(sentry=sentry)
@@ -146,7 +142,7 @@ async def run_worker(charm_config, unpacked_file_name, module_name):
 
     worker = Worker(
         client=client,
-        task_queue=charm_config["queue"],
+        task_queue=os.getenv("TWC_QUEUE"),
         workflows=workflows,
         activities=activities,
         worker_opt=worker_opt,
@@ -155,8 +151,7 @@ async def run_worker(charm_config, unpacked_file_name, module_name):
 
 
 if __name__ == "__main__":  # pragma: nocover
-    cfg = json.loads(sys.argv[1])
-    upn = sys.argv[2]
-    mn = sys.argv[3]
+    global_unpacked_file_name = sys.argv[1]
+    global_module_name = sys.argv[2]
 
-    asyncio.run(run_worker(cfg, upn, mn))
+    asyncio.run(run_worker(global_unpacked_file_name, global_module_name))

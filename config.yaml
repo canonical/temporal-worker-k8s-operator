@@ -56,6 +56,11 @@ options:
     default: ""
     type: string
 
+  sentry-redact-params:
+    description: Indicates whether or not event parameters sent to Sentry should be redacted.
+    default: false
+    type: boolean
+
   workflows-file-name:
     description: Name of the wheel file resource attached to the charm.
     default: ""
@@ -65,11 +70,6 @@ options:
     description: Base64-encoded key used for data encryption.
     default: ""
     type: string
-
-  auth-enabled:
-    description: Determines if authentication is enabled or not.
-    default: False
-    type: boolean
 
   auth-provider:
     description: |
