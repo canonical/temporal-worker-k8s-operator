@@ -4,6 +4,7 @@
 
 """Temporal charm integration test helpers."""
 
+import asyncio
 import logging
 from pathlib import Path
 
@@ -132,10 +133,12 @@ async def setup_temporal_ecosystem(ops_test: OpsTest):
     Args:
         ops_test: PyTest object.
     """
-    await ops_test.model.deploy(APP_NAME_SERVER, channel="edge")
-    await ops_test.model.deploy(APP_NAME_ADMIN, channel="edge")
-    await ops_test.model.deploy(APP_NAME_UI, channel="edge")
-    await ops_test.model.deploy("postgresql-k8s", channel="14", trust=True)
+    await asyncio.gather(
+        ops_test.model.deploy(APP_NAME_SERVER, channel="edge"),
+        ops_test.model.deploy(APP_NAME_ADMIN, channel="edge"),
+        ops_test.model.deploy(APP_NAME_UI, channel="edge"),
+        ops_test.model.deploy("postgresql-k8s", channel="14", trust=True),
+    )
 
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(

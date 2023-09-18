@@ -133,6 +133,7 @@ async def run_worker(unpacked_file_name, module_name):
             dsn=dsn,
             release=os.getenv("TWC_SENTRY_RELEASE").strip() or None,
             environment=os.getenv("TWC_SENTRY_ENVIRONMENT").strip() or None,
+            redact_params=os.getenv("TWC_SENTRY_REDACT_PARAMS"),
         )
 
         worker_opt = WorkerOptions(sentry=sentry)
@@ -150,7 +151,7 @@ async def run_worker(unpacked_file_name, module_name):
 
 
 if __name__ == "__main__":  # pragma: nocover
-    upn = sys.argv[1]
-    mn = sys.argv[2]
+    global_unpacked_file_name = sys.argv[1]
+    global_module_name = sys.argv[2]
 
-    asyncio.run(run_worker(upn, mn))
+    asyncio.run(run_worker(global_unpacked_file_name, global_module_name))

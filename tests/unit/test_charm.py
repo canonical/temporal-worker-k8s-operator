@@ -135,6 +135,7 @@ class TestCharm(TestCase):
                         "TWC_SENTRY_DSN": "",
                         "TWC_SENTRY_ENVIRONMENT": "",
                         "TWC_SENTRY_RELEASE": "",
+                        "TWC_SENTRY_REDACT_PARAMS": False,
                         "TWC_SUPPORTED_ACTIVITIES": "all",
                         "TWC_SUPPORTED_WORKFLOWS": "all",
                         "TWC_TLS_ROOT_CAS": "",
