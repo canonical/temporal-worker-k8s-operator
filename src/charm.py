@@ -153,10 +153,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             event.defer()
             return
 
-        if self.unit.is_leader():
-            self._state.module_name = None
-            self._state.unpacked_file_name = None
-
         if self.config["workflows-file-name"].strip() == "":
             raise ValueError("Invalid config: wheel-file-name missing")
 
@@ -335,6 +331,9 @@ def _setup_container(container: Container, proxy: str):
     Args:
         container: Container unit on which to perform action.
         proxy: optional proxy value used in running pip command.
+
+    Raises:
+        ValueError: if worker dependencies fail to install.
     """
     resources_path = Path(__file__).parent / "resources"
     _push_container_file(container, resources_path, "/worker.py", resources_path / "worker.py")
@@ -350,7 +349,10 @@ def _setup_container(container: Container, proxy: str):
     if proxy.strip() != "":
         command.insert(2, f"--proxy={proxy}")
 
-    container.exec(command).wait_output()
+    _, error = container.exec(command).wait_output()
+    if error is not None and error.strip() != "" and not error.strip().startswith("WARNING"):
+        logger.error(f"failed to install worker dependencies: {error}")
+        raise ValueError("Invalid state: failed to install worker dependencies")
 
 
 def _validate_wheel_name(filename):
