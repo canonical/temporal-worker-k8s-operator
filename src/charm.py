@@ -48,7 +48,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self._state = State(self.app, lambda: self.model.get_relation("peer"))
         self.name = "temporal-worker"
 
-        self.framework.observe(self.on.peer_relation_changed, self._on_peer_relation_changed)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.temporal_worker_pebble_ready, self._on_temporal_worker_pebble_ready)
         self.framework.observe(self.on.restart_action, self._on_restart)
@@ -85,15 +84,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         )
 
         event.set_results({"result": "worker successfully restarted"})
-
-    @log_event_handler(logger)
-    def _on_peer_relation_changed(self, event):
-        """Handle peer relation changed event.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        self._update(event)
 
     @log_event_handler(logger)
     def _on_config_changed(self, event):
