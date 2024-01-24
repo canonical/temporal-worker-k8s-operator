@@ -147,7 +147,15 @@ async def run_worker(unpacked_file_name, module_name):
         activities=activities,
         worker_opt=worker_opt,
     )
-    await worker.run()
+
+    try:
+        with open("worker_status.txt", "w") as status_file:
+            status_file.write("Success")
+        await worker.run()
+    except Exception as e:
+        # If an error occurs, write the error message to the status file
+        with open("worker_status.txt", "w") as status_file:
+            status_file.write(f"Error: {e}")
 
 
 if __name__ == "__main__":  # pragma: nocover

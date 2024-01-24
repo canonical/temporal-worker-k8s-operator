@@ -8,13 +8,47 @@
 import json
 from unittest import TestCase, mock
 
-from ops.model import ActiveStatus, BlockedStatus
+from ops import Container
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
+from ops.pebble import CheckStatus
 from ops.testing import Harness
 
 from charm import TemporalWorkerK8SOperatorCharm
 from state import State
 
 CONTAINER_NAME = "temporal-worker"
+CONFIG = {
+    "log-level": "debug",
+    "host": "test-host",
+    "namespace": "test-namespace",
+    "queue": "test-queue",
+    "supported-workflows": "all",
+    "supported-activities": "all",
+    "sentry-dsn": "",
+    "sentry-release": "",
+    "sentry-environment": "",
+    "workflows-file-name": "python_samples-1.1.0-py3-none-any.whl",
+    "encryption-key": "",
+    "auth-provider": "candid",
+    "tls-root-cas": "",
+    "candid-url": "test-url",
+    "candid-username": "test-username",
+    "candid-public-key": "test-public-key",
+    "candid-private-key": "test-private-key",
+    "oidc-auth-type": "",
+    "oidc-project-id": "",
+    "oidc-private-key-id": "",
+    "oidc-private-key": "",
+    "oidc-client-email": "",
+    "oidc-client-id": "",
+    "oidc-auth-uri": "",
+    "oidc-token-uri": "",
+    "oidc-auth-cert-url": "",
+    "oidc-client-cert-url": "",
+    "http-proxy": "proxy",
+    "https-proxy": "proxy",
+    "no-proxy": "none",
+}
 
 
 class TestCharm(TestCase):
@@ -60,39 +94,7 @@ class TestCharm(TestCase):
         """The charm is blocked without a admin:temporal relation with a ready schema."""
         harness = self.harness
 
-        config = {
-            "log-level": "debug",
-            "host": "test-host",
-            "namespace": "test-namespace",
-            "queue": "test-queue",
-            "supported-workflows": "all",
-            "supported-activities": "all",
-            "sentry-dsn": "",
-            "sentry-release": "",
-            "sentry-environment": "",
-            "workflows-file-name": "python_samples-1.1.0-py3-none-any.whl",
-            "encryption-key": "",
-            "auth-provider": "candid",
-            "tls-root-cas": "",
-            "candid-url": "test-url",
-            "candid-username": "test-username",
-            "candid-public-key": "test-public-key",
-            "candid-private-key": "test-private-key",
-            "oidc-auth-type": "",
-            "oidc-project-id": "",
-            "oidc-private-key-id": "",
-            "oidc-private-key": "",
-            "oidc-client-email": "",
-            "oidc-client-id": "",
-            "oidc-auth-uri": "",
-            "oidc-token-uri": "",
-            "oidc-auth-cert-url": "",
-            "oidc-client-cert-url": "",
-            "http-proxy": "proxy",
-            "https-proxy": "proxy",
-            "no-proxy": "none",
-        }
-        state = simulate_lifecycle(harness, config)
+        state = simulate_lifecycle(harness, CONFIG)
         harness.charm.on.config_changed.emit()
 
         module_name = json.loads(state["module_name"])
@@ -144,6 +146,7 @@ class TestCharm(TestCase):
                         "HTTPS_PROXY": "proxy",
                         "NO_PROXY": "none",
                     },
+                    "on-check-failure": {"up": "ignore"},
                 }
             },
         }
@@ -155,10 +158,46 @@ class TestCharm(TestCase):
         self.assertTrue(service.is_running())
 
         # The ActiveStatus is set.
+        self.assertEqual(harness.model.unit.status, MaintenanceStatus("replanning application"))
+
+    @mock.patch("charm.TemporalWorkerK8SOperatorCharm._process_wheel_file")
+    @mock.patch("charm._setup_container")
+    @mock.patch.object(Container, "exec")
+    def test_update_status_up(self, _process_wheel_file, _setup_container, mock_exec):
+        """The charm updates the unit status to active based on UP status."""
+        harness = self.harness
+        mock_exec.return_value = mock.MagicMock(wait_output=mock.MagicMock(return_value=("", None)))
+
+        simulate_lifecycle(harness, CONFIG)
+        self.harness.container_pebble_ready(CONTAINER_NAME)
+
+        container = harness.model.unit.get_container(CONTAINER_NAME)
+        container.get_check = mock.Mock(status="up")
+        container.get_check.return_value.status = CheckStatus.UP
+        harness.charm.on.update_status.emit()
+
         self.assertEqual(
             harness.model.unit.status,
-            ActiveStatus(f"worker listening to namespace {config['namespace']!r} on queue {config['queue']!r}"),
+            ActiveStatus(f"worker listening to namespace {CONFIG['namespace']!r} on queue {CONFIG['queue']!r}"),
         )
+
+    @mock.patch("charm.TemporalWorkerK8SOperatorCharm._process_wheel_file")
+    @mock.patch("charm._setup_container")
+    @mock.patch.object(Container, "exec")
+    def test_update_status_down(self, _process_wheel_file, _setup_container, mock_exec):
+        """The charm updates the unit status to maintenance based on DOWN status."""
+        harness = self.harness
+        mock_exec.return_value = mock.MagicMock(wait_output=mock.MagicMock(return_value=1))
+
+        simulate_lifecycle(harness, CONFIG)
+        self.harness.container_pebble_ready(CONTAINER_NAME)
+
+        container = harness.model.unit.get_container(CONTAINER_NAME)
+        container.get_check = mock.Mock(status="up")
+        container.get_check.return_value.status = CheckStatus.DOWN
+        harness.charm.on.update_status.emit()
+
+        self.assertEqual(harness.model.unit.status, MaintenanceStatus("Status check: DOWN"))
 
 
 def simulate_lifecycle(harness, config):

@@ -24,5 +24,5 @@ class TestDeployment:
         await run_sample_workflow(ops_test)
 
     async def test_invalid_env_file(self, ops_test: OpsTest):
-        """Connects a client and runs a basic Temporal workflow."""
+        """Attaches an invalid .env file to the worker."""
         await attach_worker_resource_file(ops_test, rsc_type="env-file")
