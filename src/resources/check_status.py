@@ -5,7 +5,10 @@
 """Temporal worker status checker."""
 
 
+import logging
 import sys
+
+logger = logging.getLogger(__name__)
 
 
 def check_worker_status():
@@ -13,14 +16,14 @@ def check_worker_status():
     try:
         with open("worker_status.txt", "r") as status_file:
             status = status_file.read().strip()
-            print(f"Async status: {status}")
+            logger.info(f"Async status: {status}")
 
         if "Error" in status:
             exit_code = 1
         else:
             exit_code = 0
     except FileNotFoundError:
-        print("Status file not found. Worker is not running.")
+        logger.error("Status file not found. Worker is not running.")
         exit_code = 1
 
     sys.exit(exit_code)
