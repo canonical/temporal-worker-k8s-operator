@@ -50,4 +50,4 @@ async def deploy(ops_test: OpsTest):
         url = await get_application_url(ops_test, application=APP_NAME_SERVER, port=7233)
         await ops_test.model.applications[APP_NAME].set_config({"host": url})
 
-        await attach_worker_resource_file(ops_test)
+        await attach_worker_resource_file(ops_test, rsc_type="workflows")

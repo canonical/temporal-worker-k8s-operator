@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 from dotenv import dotenv_values
-from ops import main
+from ops import main, pebble
 from ops.charm import CharmBase
 from ops.model import (
     ActiveStatus,
@@ -21,6 +21,7 @@ from ops.model import (
     ModelError,
     WaitingStatus,
 )
+from ops.pebble import CheckStatus
 
 from literals import (
     REQUIRED_CANDID_CONFIG,
@@ -51,6 +52,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.temporal_worker_pebble_ready, self._on_temporal_worker_pebble_ready)
         self.framework.observe(self.on.restart_action, self._on_restart)
+        self.framework.observe(self.on.update_status, self._on_update_status)
 
     @log_event_handler(logger)
     def _on_temporal_worker_pebble_ready(self, event):
@@ -94,6 +96,48 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         """
         self.unit.status = WaitingStatus("configuring temporal worker")
         self._update(event)
+
+    @log_event_handler(logger)
+    def _on_update_status(self, event):
+        """Handle `update-status` events.
+
+        Args:
+            event: The `update-status` event triggered at intervals.
+        """
+        try:
+            self._validate(event)
+        except ValueError:
+            return
+
+        container = self.unit.get_container(self.name)
+        valid_pebble_plan = self._validate_pebble_plan(container)
+        if not valid_pebble_plan:
+            self._update(event)
+            return
+
+        check = container.get_check("up")
+        if check.status != CheckStatus.UP:
+            self.unit.status = MaintenanceStatus("Status check: DOWN")
+            return
+
+        self.unit.status = ActiveStatus(
+            f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
+        )
+
+    def _validate_pebble_plan(self, container):
+        """Validate Temporal worker pebble plan.
+
+        Args:
+            container: application container
+
+        Returns:
+            bool of pebble plan validity
+        """
+        try:
+            plan = container.get_plan().to_dict()
+            return bool(plan and plan["services"].get(self.name, {}).get("on-check-failure"))
+        except pebble.ConnectionError:
+            return False
 
     def _process_env_file(self, event):
         """Process env file attached by user.
@@ -289,6 +333,15 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                     "startup": "enabled",
                     "override": "replace",
                     "environment": context,
+                    "on-check-failure": {"up": "ignore"},
+                }
+            },
+            "checks": {
+                "up": {
+                    "override": "replace",
+                    "level": "alive",
+                    "period": "10s",
+                    "exec": {"command": "python check_status.py"},
                 }
             },
         }
@@ -296,9 +349,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         container.add_layer(self.name, pebble_layer, combine=True)
         container.replan()
 
-        self.unit.status = ActiveStatus(
-            f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
-        )
+        self.unit.status = MaintenanceStatus("replanning application")
 
 
 def convert_env_var(config_var, prefix="TWC_"):
@@ -327,6 +378,7 @@ def _setup_container(container: Container, proxy: str):
     """
     resources_path = Path(__file__).parent / "resources"
     _push_container_file(container, resources_path, "/worker.py", resources_path / "worker.py")
+    _push_container_file(container, resources_path, "/check_status.py", resources_path / "check_status.py")
     _push_container_file(
         container, resources_path, "/worker-dependencies.txt", resources_path / "worker-dependencies.txt"
     )

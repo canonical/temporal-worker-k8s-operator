@@ -104,50 +104,58 @@ async def run_worker(unpacked_file_name, module_name):
         queue=os.getenv("TWC_QUEUE"),
     )
 
-    workflows = _import_modules(
-        "workflows",
-        unpacked_file_name=unpacked_file_name,
-        module_name=module_name,
-        supported_modules=os.getenv("TWC_SUPPORTED_WORKFLOWS").split(","),
-    )
-    activities = _import_modules(
-        "activities",
-        unpacked_file_name=unpacked_file_name,
-        module_name=module_name,
-        supported_modules=os.getenv("TWC_SUPPORTED_ACTIVITIES").split(","),
-    )
-
-    if os.getenv("TWC_TLS_ROOT_CAS").strip() != "":
-        client_config.tls_root_cas = os.getenv("TWC_TLS_ROOT_CAS")
-
-    if os.getenv("TWC_AUTH_PROVIDER").strip() != "":
-        client_config.auth = AuthOptions(provider=os.getenv("TWC_AUTH_PROVIDER"), config=_get_auth_header())
-
-    if os.getenv("TWC_ENCRYPTION_KEY").strip() != "":
-        client_config.encryption = EncryptionOptions(key=os.getenv("TWC_ENCRYPTION_KEY"), compress=True)
-
-    worker_opt = None
-    dsn = os.getenv("TWC_SENTRY_DSN").strip()
-    if dsn != "":
-        sentry = SentryOptions(
-            dsn=dsn,
-            release=os.getenv("TWC_SENTRY_RELEASE").strip() or None,
-            environment=os.getenv("TWC_SENTRY_ENVIRONMENT").strip() or None,
-            redact_params=os.getenv("TWC_SENTRY_REDACT_PARAMS"),
+    try:
+        workflows = _import_modules(
+            "workflows",
+            unpacked_file_name=unpacked_file_name,
+            module_name=module_name,
+            supported_modules=os.getenv("TWC_SUPPORTED_WORKFLOWS").split(","),
+        )
+        activities = _import_modules(
+            "activities",
+            unpacked_file_name=unpacked_file_name,
+            module_name=module_name,
+            supported_modules=os.getenv("TWC_SUPPORTED_ACTIVITIES").split(","),
         )
 
-        worker_opt = WorkerOptions(sentry=sentry)
+        if os.getenv("TWC_TLS_ROOT_CAS").strip() != "":
+            client_config.tls_root_cas = os.getenv("TWC_TLS_ROOT_CAS")
 
-    client = await Client.connect(client_config)
+        if os.getenv("TWC_AUTH_PROVIDER").strip() != "":
+            client_config.auth = AuthOptions(provider=os.getenv("TWC_AUTH_PROVIDER"), config=_get_auth_header())
 
-    worker = Worker(
-        client=client,
-        task_queue=os.getenv("TWC_QUEUE"),
-        workflows=workflows,
-        activities=activities,
-        worker_opt=worker_opt,
-    )
-    await worker.run()
+        if os.getenv("TWC_ENCRYPTION_KEY").strip() != "":
+            client_config.encryption = EncryptionOptions(key=os.getenv("TWC_ENCRYPTION_KEY"), compress=True)
+
+        worker_opt = None
+        dsn = os.getenv("TWC_SENTRY_DSN").strip()
+        if dsn != "":
+            sentry = SentryOptions(
+                dsn=dsn,
+                release=os.getenv("TWC_SENTRY_RELEASE").strip() or None,
+                environment=os.getenv("TWC_SENTRY_ENVIRONMENT").strip() or None,
+                redact_params=os.getenv("TWC_SENTRY_REDACT_PARAMS"),
+            )
+
+            worker_opt = WorkerOptions(sentry=sentry)
+
+        client = await Client.connect(client_config)
+
+        worker = Worker(
+            client=client,
+            task_queue=os.getenv("TWC_QUEUE"),
+            workflows=workflows,
+            activities=activities,
+            worker_opt=worker_opt,
+        )
+
+        with open("worker_status.txt", "w") as status_file:
+            status_file.write("Success")
+        await worker.run()
+    except Exception as e:
+        # If an error occurs, write the error message to the status file
+        with open("worker_status.txt", "w") as status_file:
+            status_file.write(f"Error: {e}")
 
 
 if __name__ == "__main__":  # pragma: nocover
