@@ -283,6 +283,10 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             elif self.config["auth-provider"] == "google":
                 self._check_required_config(REQUIRED_OIDC_CONFIG)
 
+        sample_rate = self.config["sentry-sample-rate"]
+        if self.config["sentry-dsn"] and (sample_rate < 0 or sample_rate > 1):
+            raise ValueError("Invalid config: sentry-sample-rate must be between 0 and 1")
+
     def _update(self, event):
         """Update the Temporal worker configuration and replan its execution.
 

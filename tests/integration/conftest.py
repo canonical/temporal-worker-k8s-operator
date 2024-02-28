@@ -28,6 +28,7 @@ env_rsc_path = "./resource_sample/sample.env"
 @pytest_asyncio.fixture(name="deploy", scope="module")
 async def deploy(ops_test: OpsTest):
     """Verify the app is up and running."""
+    await ops_test.model.set_config({"update-status-hook-interval": "1m"})
     await setup_temporal_ecosystem(ops_test)
 
     charm = await ops_test.build_charm(".")

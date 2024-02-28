@@ -135,6 +135,7 @@ async def run_worker(unpacked_file_name, module_name):
                 release=os.getenv("TWC_SENTRY_RELEASE").strip() or None,
                 environment=os.getenv("TWC_SENTRY_ENVIRONMENT").strip() or None,
                 redact_params=os.getenv("TWC_SENTRY_REDACT_PARAMS"),
+                sample_rate=os.getenv("TWC_SENTRY_SAMPLE_RATE"),
             )
 
             worker_opt = WorkerOptions(sentry=sentry)
