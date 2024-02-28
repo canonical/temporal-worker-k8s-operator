@@ -61,6 +61,14 @@ options:
     default: false
     type: boolean
 
+  sentry-sample-rate:
+    description: |
+      A value between 0 (0% of errors) and 1 (100% of errors) to indicate the proportion of errors 
+      to be captured by Sentry.
+    
+    default: 1.0
+    type: float
+
   workflows-file-name:
     description: Name of the wheel file resource attached to the charm.
     default: ""

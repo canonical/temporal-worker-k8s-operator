@@ -137,6 +137,7 @@ class TestCharm(TestCase):
                         "TWC_SENTRY_DSN": "",
                         "TWC_SENTRY_ENVIRONMENT": "",
                         "TWC_SENTRY_RELEASE": "",
+                        "TWC_SENTRY_SAMPLE_RATE": 1.0,
                         "TWC_SENTRY_REDACT_PARAMS": False,
                         "TWC_SUPPORTED_ACTIVITIES": "all",
                         "TWC_SUPPORTED_WORKFLOWS": "all",
@@ -147,6 +148,14 @@ class TestCharm(TestCase):
                         "NO_PROXY": "none",
                     },
                     "on-check-failure": {"up": "ignore"},
+                }
+            },
+            "checks": {
+                "up": {
+                    "override": "replace",
+                    "level": "alive",
+                    "period": "10s",
+                    "exec": {"command": "python check_status.py"},
                 }
             },
         }
