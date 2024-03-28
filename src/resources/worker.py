@@ -10,6 +10,7 @@ import glob
 import inspect
 import os
 import sys
+import traceback
 from importlib import import_module
 
 from temporallib.auth import (
@@ -156,7 +157,7 @@ async def run_worker(unpacked_file_name, module_name):
     except Exception as e:
         # If an error occurs, write the error message to the status file
         with open("worker_status.txt", "w") as status_file:
-            status_file.write(f"Error: {e}")
+            traceback.print_exception(type(e), e, e.__traceback__, file=status_file)
 
 
 if __name__ == "__main__":  # pragma: nocover
