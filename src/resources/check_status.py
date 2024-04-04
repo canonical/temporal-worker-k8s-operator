@@ -18,10 +18,10 @@ def check_worker_status():
             status = status_file.read().strip()
             logger.info(f"Async status: {status}")
 
-        if "Error" in status:
-            exit_code = 1
-        else:
+        if status.startswith("Success"):
             exit_code = 0
+        else:
+            exit_code = 1
     except FileNotFoundError:
         logger.error("Status file not found. Worker is not running.")
         exit_code = 1
