@@ -8,8 +8,10 @@
 import asyncio
 import glob
 import inspect
+import logging
 import os
 import sys
+import traceback
 from importlib import import_module
 
 from temporallib.auth import (
@@ -21,6 +23,9 @@ from temporallib.auth import (
 from temporallib.client import Client, Options
 from temporallib.encryption import EncryptionOptions
 from temporallib.worker import SentryOptions, Worker, WorkerOptions
+
+
+logger = logging.getLogger(__name__)
 
 
 def _get_auth_header():
@@ -156,7 +161,8 @@ async def run_worker(unpacked_file_name, module_name):
     except Exception as e:
         # If an error occurs, write the error message to the status file
         with open("worker_status.txt", "w") as status_file:
-            status_file.write(f"Error: {e}")
+            logger.exception("Error in the workflow:")
+            traceback.print_exception(type(e), e, e.__traceback__, file=status_file)
 
 
 if __name__ == "__main__":  # pragma: nocover
