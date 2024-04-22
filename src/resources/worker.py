@@ -22,6 +22,7 @@ from temporallib.auth import (
 )
 from temporallib.client import Client, Options
 from temporallib.encryption import EncryptionOptions
+from temporalio.runtime import PrometheusConfig, Runtime, TelemetryConfig
 from temporallib.worker import SentryOptions, Worker, WorkerOptions
 
 
@@ -96,6 +97,15 @@ def _import_modules(module_type, unpacked_file_name, module_name, supported_modu
     return module_list
 
 
+
+def _init_runtime_with_prometheus(port: int) -> Runtime:
+    # Create runtime for use with Prometheus metrics
+    return Runtime(
+        telemetry=TelemetryConfig(
+            metrics=PrometheusConfig(bind_address=f"0.0.0.0:{port}")
+        )
+    )
+
 async def run_worker(unpacked_file_name, module_name):
     """Connect Temporal worker to Temporal server.
 
@@ -144,8 +154,10 @@ async def run_worker(unpacked_file_name, module_name):
             )
 
             worker_opt = WorkerOptions(sentry=sentry)
+        
+        runtime = _init_runtime_with_prometheus(9000)
 
-        client = await Client.connect(client_config)
+        client = await Client.connect(client_config, runtime=runtime)
 
         worker = Worker(
             client=client,
