@@ -28,6 +28,7 @@ from ops.pebble import CheckStatus
 
 from literals import (
     LOG_FILE,
+    PROMETHEUS_PORT,
     REQUIRED_CANDID_CONFIG,
     REQUIRED_CHARM_CONFIG,
     REQUIRED_OIDC_CONFIG,
@@ -62,7 +63,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self._prometheus_scraping = MetricsEndpointProvider(
             self,
             relation_name="metrics-endpoint",
-            jobs=[{"static_configs": [{"targets": ["*:9000"]}]}],
+            jobs=[{"static_configs": [{"targets": [f"*:{PROMETHEUS_PORT}"]}]}],
             refresh_event=self.on.config_changed,
         )
 
@@ -400,6 +401,7 @@ def _setup_container(container: Container, proxy: str):
     """
     resources_path = Path(__file__).parent / "resources"
     _push_container_file(container, resources_path, "/worker.py", resources_path / "worker.py")
+    _push_container_file(container, resources_path, "/../literals.py", resources_path / "../literals.py")
     _push_container_file(container, resources_path, "/check_status.py", resources_path / "check_status.py")
     _push_container_file(
         container, resources_path, "/worker-dependencies.txt", resources_path / "worker-dependencies.txt"

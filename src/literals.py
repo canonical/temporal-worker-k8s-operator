@@ -23,3 +23,4 @@ REQUIRED_OIDC_CONFIG = [
     "oidc-client-cert-url",
 ]
 SUPPORTED_AUTH_PROVIDERS = ["candid", "google"]
+PROMETHEUS_PORT = 9000

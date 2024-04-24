@@ -25,6 +25,8 @@ from temporallib.client import Client, Options
 from temporallib.encryption import EncryptionOptions
 from temporallib.worker import SentryOptions, Worker, WorkerOptions
 
+from literals import PROMETHEUS_PORT
+
 logger = logging.getLogger(__name__)
 
 
@@ -157,7 +159,7 @@ async def run_worker(unpacked_file_name, module_name):
 
             worker_opt = WorkerOptions(sentry=sentry)
 
-        runtime = _init_runtime_with_prometheus(9000)
+        runtime = _init_runtime_with_prometheus(PROMETHEUS_PORT)
 
         client = await Client.connect(client_config, runtime=runtime)
 
