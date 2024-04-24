@@ -10,7 +10,6 @@ import logging
 import re
 from pathlib import Path
 
-
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
@@ -59,12 +58,11 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self.framework.observe(self.on.restart_action, self._on_restart)
         self.framework.observe(self.on.update_status, self._on_update_status)
 
-
         # Prometheus
         self._prometheus_scraping = MetricsEndpointProvider(
             self,
             relation_name="metrics-endpoint",
-            jobs=[{"static_configs": [{"targets": [f"*:9000"]}]}],
+            jobs=[{"static_configs": [{"targets": ["*:9000"]}]}],
             refresh_event=self.on.config_changed,
         )
 
@@ -73,7 +71,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         # Grafana
         self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
-
 
     @log_event_handler(logger)
     def _on_temporal_worker_pebble_ready(self, event):
