@@ -10,6 +10,9 @@ import logging
 import re
 from pathlib import Path
 
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
+from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from dotenv import dotenv_values
 from ops import main, pebble
 from ops.charm import CharmBase
@@ -24,6 +27,8 @@ from ops.model import (
 from ops.pebble import CheckStatus
 
 from literals import (
+    LOG_FILE,
+    PROMETHEUS_PORT,
     REQUIRED_CANDID_CONFIG,
     REQUIRED_CHARM_CONFIG,
     REQUIRED_OIDC_CONFIG,
@@ -53,6 +58,20 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self.framework.observe(self.on.temporal_worker_pebble_ready, self._on_temporal_worker_pebble_ready)
         self.framework.observe(self.on.restart_action, self._on_restart)
         self.framework.observe(self.on.update_status, self._on_update_status)
+
+        # Prometheus
+        self._prometheus_scraping = MetricsEndpointProvider(
+            self,
+            relation_name="metrics-endpoint",
+            jobs=[{"static_configs": [{"targets": [f"*:{PROMETHEUS_PORT}"]}]}],
+            refresh_event=self.on.config_changed,
+        )
+
+        # Loki
+        self._log_proxy = LogProxyConsumer(self, log_files=[LOG_FILE], relation_name="log-proxy")
+
+        # Grafana
+        self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
 
     @log_event_handler(logger)
     def _on_temporal_worker_pebble_ready(self, event):
@@ -382,6 +401,7 @@ def _setup_container(container: Container, proxy: str):
     """
     resources_path = Path(__file__).parent / "resources"
     _push_container_file(container, resources_path, "/worker.py", resources_path / "worker.py")
+    _push_container_file(container, resources_path, "/../literals.py", resources_path / "../literals.py")
     _push_container_file(container, resources_path, "/check_status.py", resources_path / "check_status.py")
     _push_container_file(
         container, resources_path, "/worker-dependencies.txt", resources_path / "worker-dependencies.txt"

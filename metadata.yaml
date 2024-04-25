@@ -50,3 +50,14 @@ resources:
     type: file
     description: .env file containing environment variables to be sourced to the workload container.
     filename: '.env'
+
+provides:
+  metrics-endpoint:
+    interface: prometheus_scrape
+  grafana-dashboard:
+    interface: grafana_dashboard
+
+requires:
+  log-proxy:
+    interface: loki_push_api
+    limit: 1
