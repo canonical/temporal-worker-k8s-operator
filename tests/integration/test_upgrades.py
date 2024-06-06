@@ -29,7 +29,7 @@ async def deploy(ops_test: OpsTest):
     await setup_temporal_ecosystem(ops_test)
 
     # Deploy Temporal worker charm from Charmhub store
-    await ops_test.model.deploy(APP_NAME, config=WORKER_CONFIG)
+    await ops_test.model.deploy(APP_NAME, config=WORKER_CONFIG, channel="edge")
 
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(

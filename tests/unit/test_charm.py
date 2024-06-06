@@ -14,41 +14,7 @@ from ops.pebble import CheckStatus
 from ops.testing import Harness
 
 from charm import TemporalWorkerK8SOperatorCharm
-from state import State
-
-CONTAINER_NAME = "temporal-worker"
-CONFIG = {
-    "log-level": "debug",
-    "host": "test-host",
-    "namespace": "test-namespace",
-    "queue": "test-queue",
-    "supported-workflows": "all",
-    "supported-activities": "all",
-    "sentry-dsn": "",
-    "sentry-release": "",
-    "sentry-environment": "",
-    "workflows-file-name": "python_samples-1.1.0-py3-none-any.whl",
-    "encryption-key": "",
-    "auth-provider": "candid",
-    "tls-root-cas": "",
-    "candid-url": "test-url",
-    "candid-username": "test-username",
-    "candid-public-key": "test-public-key",
-    "candid-private-key": "test-private-key",
-    "oidc-auth-type": "",
-    "oidc-project-id": "",
-    "oidc-private-key-id": "",
-    "oidc-private-key": "",
-    "oidc-client-email": "",
-    "oidc-client-id": "",
-    "oidc-auth-uri": "",
-    "oidc-token-uri": "",
-    "oidc-auth-cert-url": "",
-    "oidc-client-cert-url": "",
-    "http-proxy": "proxy",
-    "https-proxy": "proxy",
-    "no-proxy": "none",
-}
+from tests.unit.literals import CONFIG, CONTAINER_NAME, EXPECTED_VAULT_ENV, WANT_ENV
 
 
 class TestCharm(TestCase):
@@ -91,7 +57,7 @@ class TestCharm(TestCase):
     @mock.patch("charm.TemporalWorkerK8SOperatorCharm._process_wheel_file")
     @mock.patch("charm._setup_container")
     def test_ready(self, _process_wheel_file, _setup_container):
-        """The charm is blocked without a admin:temporal relation with a ready schema."""
+        """The charm is ready."""
         harness = self.harness
 
         state = simulate_lifecycle(harness, CONFIG)
@@ -110,43 +76,7 @@ class TestCharm(TestCase):
                     "command": command,
                     "startup": "enabled",
                     "override": "replace",
-                    "environment": {
-                        "TWC_AUTH_PROVIDER": "candid",
-                        "TWC_CANDID_PRIVATE_KEY": "test-private-key",
-                        "TWC_CANDID_PUBLIC_KEY": "test-public-key",
-                        "TWC_CANDID_URL": "test-url",
-                        "TWC_CANDID_USERNAME": "test-username",
-                        "TWC_ENCRYPTION_KEY": "",
-                        "TWC_HOST": "test-host",
-                        "TWC_HTTPS_PROXY": "proxy",
-                        "TWC_HTTP_PROXY": "proxy",
-                        "TWC_LOG_LEVEL": "debug",
-                        "TWC_NAMESPACE": "test-namespace",
-                        "TWC_NO_PROXY": "none",
-                        "TWC_OIDC_AUTH_CERT_URL": "",
-                        "TWC_OIDC_AUTH_TYPE": "",
-                        "TWC_OIDC_AUTH_URI": "",
-                        "TWC_OIDC_CLIENT_CERT_URL": "",
-                        "TWC_OIDC_CLIENT_EMAIL": "",
-                        "TWC_OIDC_CLIENT_ID": "",
-                        "TWC_OIDC_PRIVATE_KEY": "",
-                        "TWC_OIDC_PRIVATE_KEY_ID": "",
-                        "TWC_OIDC_PROJECT_ID": "",
-                        "TWC_OIDC_TOKEN_URI": "",
-                        "TWC_QUEUE": "test-queue",
-                        "TWC_SENTRY_DSN": "",
-                        "TWC_SENTRY_ENVIRONMENT": "",
-                        "TWC_SENTRY_RELEASE": "",
-                        "TWC_SENTRY_SAMPLE_RATE": 1.0,
-                        "TWC_SENTRY_REDACT_PARAMS": False,
-                        "TWC_SUPPORTED_ACTIVITIES": "all",
-                        "TWC_SUPPORTED_WORKFLOWS": "all",
-                        "TWC_TLS_ROOT_CAS": "",
-                        "TWC_WORKFLOWS_FILE_NAME": "python_samples-1.1.0-py3-none-any.whl",
-                        "HTTP_PROXY": "proxy",
-                        "HTTPS_PROXY": "proxy",
-                        "NO_PROXY": "none",
-                    },
+                    "environment": WANT_ENV,
                     "on-check-failure": {"up": "ignore"},
                 }
             },
@@ -166,7 +96,6 @@ class TestCharm(TestCase):
         service = harness.model.unit.get_container(CONTAINER_NAME).get_service("temporal-worker")
         self.assertTrue(service.is_running())
 
-        # The ActiveStatus is set.
         self.assertEqual(harness.model.unit.status, MaintenanceStatus("replanning application"))
 
     @mock.patch("charm.TemporalWorkerK8SOperatorCharm._process_wheel_file")
@@ -208,6 +137,82 @@ class TestCharm(TestCase):
 
         self.assertEqual(harness.model.unit.status, MaintenanceStatus("Status check: DOWN"))
 
+    @mock.patch("charm.TemporalWorkerK8SOperatorCharm._process_wheel_file")
+    @mock.patch("charm._setup_container")
+    def test_vault_relation(self, _process_wheel_file, _setup_container):
+        """The charm is ready with vault relation."""
+        harness = self.harness
+
+        state = simulate_lifecycle(harness, CONFIG)
+        harness.charm.on.config_changed.emit()
+
+        module_name = json.loads(state["module_name"])
+        unpacked_file_name = json.loads(state["unpacked_file_name"])
+        command = f"python worker.py {unpacked_file_name} {module_name}"
+
+        add_vault_relation(self, harness)
+        self.harness.update_config({})
+
+        # The plan is generated after pebble is ready.
+        want_plan = {
+            "services": {
+                "temporal-worker": {
+                    "summary": "temporal worker",
+                    "command": command,
+                    "startup": "enabled",
+                    "override": "replace",
+                    "environment": {**WANT_ENV, **EXPECTED_VAULT_ENV},
+                    "on-check-failure": {"up": "ignore"},
+                }
+            },
+            "checks": {
+                "up": {
+                    "override": "replace",
+                    "level": "alive",
+                    "period": "10s",
+                    "exec": {"command": "python check_status.py"},
+                }
+            },
+        }
+
+        got_plan = harness.get_container_pebble_plan("temporal-worker").to_dict()
+        self.assertEqual(got_plan, want_plan)
+
+
+def add_vault_relation(test, harness):
+    """Add vault relation to harness.
+
+    Args:
+        test: TestCharm object.
+        harness: ops.testing.Harness object used to simulate charm lifecycle.
+    """
+    harness.charm.on.install.emit()
+    relation_id = harness.add_relation("vault", "vault-k8s")
+    harness.add_relation_unit(relation_id, "vault-k8s/0")
+
+    data = harness.get_relation_data(relation_id, "temporal-worker-k8s/0")
+    test.assertTrue(data)
+    test.assertTrue("egress_subnet" in data)
+    test.assertTrue("nonce" in data)
+
+    secret_id = harness.add_model_secret(
+        "vault-k8s/0",
+        {"role-id": "111", "role-secret-id": "222"},
+    )
+    harness.grant_secret(secret_id, "temporal-worker-k8s")
+
+    credentials = {data["nonce"]: secret_id}
+    harness.update_relation_data(
+        relation_id,
+        "vault-k8s",
+        {
+            "vault_url": "127.0.0.1:8081",
+            "ca_certificate": "abcd",
+            "mount": "temporal-worker-k8s",
+            "credentials": json.dumps(credentials, sort_keys=True),
+        },
+    )
+
 
 def simulate_lifecycle(harness, config):
     """Simulate a healthy charm life-cycle.
@@ -241,61 +246,3 @@ def simulate_lifecycle(harness, config):
     )
 
     return harness.get_relation_data(rel, "temporal-worker-k8s")
-
-
-class TestState(TestCase):
-    """Unit tests for state.
-
-    Attrs:
-        maxDiff: Specifies max difference shown by failed tests.
-    """
-
-    maxDiff = None
-
-    def test_get(self):
-        """It is possible to retrieve attributes from the state."""
-        state = make_state({"foo": json.dumps("bar")})
-        self.assertEqual(state.foo, "bar")
-        self.assertIsNone(state.bad)
-
-    def test_set(self):
-        """It is possible to set attributes in the state."""
-        data = {"foo": json.dumps("bar")}
-        state = make_state(data)
-        state.foo = 42
-        state.list = [1, 2, 3]
-        self.assertEqual(state.foo, 42)
-        self.assertEqual(state.list, [1, 2, 3])
-        self.assertEqual(data, {"foo": "42", "list": "[1, 2, 3]"})
-
-    def test_del(self):
-        """It is possible to unset attributes in the state."""
-        data = {"foo": json.dumps("bar"), "answer": json.dumps(42)}
-        state = make_state(data)
-        del state.foo
-        self.assertIsNone(state.foo)
-        self.assertEqual(data, {"answer": "42"})
-        # Deleting a name that is not set does not error.
-        del state.foo
-
-    def test_is_ready(self):
-        """The state is not ready when it is not possible to get relations."""
-        state = make_state({})
-        self.assertTrue(state.is_ready())
-
-        state = State("myapp", lambda: None)
-        self.assertFalse(state.is_ready())
-
-
-def make_state(data):
-    """Create state object.
-
-    Args:
-        data: Data to be included in state.
-
-    Returns:
-        State object with data.
-    """
-    app = "myapp"
-    rel = type("Rel", (), {"data": {app: data}})()
-    return State(app, lambda: rel)

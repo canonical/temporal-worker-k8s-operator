@@ -17,13 +17,13 @@ with workflow.unsafe.imports_passed_through():
 from datetime import timedelta
 
 # Basic workflow that logs and invokes an activity
-@workflow.defn(name="GreetingWorkflow2")
-class GreetingWorkflow2:
+@workflow.defn(name="VaultWorkflow")
+class VaultWorkflow:
     @workflow.run
     async def run(self, name: str) -> str:
         workflow.logger.info("Running workflow with parameter %s" % name)
         return await workflow.execute_activity(
-            all_activities.compose_greeting2,
+            all_activities.vault_test,
             all_activities.ComposeGreetingInput("Hello", name),
             start_to_close_timeout=timedelta(seconds=10),
         )

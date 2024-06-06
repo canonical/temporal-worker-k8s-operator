@@ -4,9 +4,40 @@
 from temporalio import activity
 from dataclasses import dataclass
 from resource_sample.common.messages import ComposeGreetingInput
+import os
+import hvac
+
+vault_client = None
+if os.getenv("TWC_VAULT_ADDR"):
+    vault_client = hvac.Client(
+        url=os.getenv("TWC_VAULT_ADDR"),
+        verify=os.getenv("TWC_VAULT_CERT_PATH"),
+    )
+
+    vault_client.auth.approle.login(
+        role_id=os.getenv("TWC_VAULT_ROLE_ID"),
+        secret_id=os.getenv("TWC_VAULT_ROLE_SECRET_ID"),
+    )
 
 # Basic activity that logs and does string concatenation
-@activity.defn(name="compose_greeting2")
-async def compose_greeting2(arg: ComposeGreetingInput) -> str:
+@activity.defn(name="vault_test")
+async def vault_test(arg: ComposeGreetingInput) -> str:
     activity.logger.info("Running activity with parameter %s" % arg)
-    return f"{arg.greeting}, {arg.name}!"
+
+    hvac_secret = {
+        'greeting': arg.greeting,
+    }
+
+    vault_client.secrets.kv.v2.create_or_update_secret(
+        path='credentials',
+        mount_point=os.getenv('TWC_VAULT_MOUNT'),
+        secret=hvac_secret,
+    )
+
+    read_secret_result = vault_client.secrets.kv.v2.read_secret(
+        path='credentials',
+        mount_point=os.getenv('TWC_VAULT_MOUNT'),
+    )
+    
+    greeting = read_secret_result['data']['data']['greeting']
+    return f"{greeting}, {arg.name}!"
