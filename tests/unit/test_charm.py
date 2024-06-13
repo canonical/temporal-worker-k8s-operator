@@ -150,7 +150,7 @@ class TestCharm(TestCase):
         unpacked_file_name = json.loads(state["unpacked_file_name"])
         command = f"python worker.py {unpacked_file_name} {module_name}"
 
-        add_vault_relation(self, harness)
+        relation_id = add_vault_relation(self, harness)
         self.harness.update_config({})
 
         # The plan is generated after pebble is ready.
@@ -178,6 +178,35 @@ class TestCharm(TestCase):
         got_plan = harness.get_container_pebble_plan("temporal-worker").to_dict()
         self.assertEqual(got_plan, want_plan)
 
+        # Remove vault relation
+        harness.remove_relation(relation_id)
+        self.harness.update_config({})
+
+        # The plan is generated after pebble is ready.
+        want_plan = {
+            "services": {
+                "temporal-worker": {
+                    "summary": "temporal worker",
+                    "command": command,
+                    "startup": "enabled",
+                    "override": "replace",
+                    "environment": {**WANT_ENV},
+                    "on-check-failure": {"up": "ignore"},
+                }
+            },
+            "checks": {
+                "up": {
+                    "override": "replace",
+                    "level": "alive",
+                    "period": "10s",
+                    "exec": {"command": "python check_status.py"},
+                }
+            },
+        }
+
+        got_plan = harness.get_container_pebble_plan("temporal-worker").to_dict()
+        self.assertEqual(got_plan, want_plan)
+
 
 def add_vault_relation(test, harness):
     """Add vault relation to harness.
@@ -185,6 +214,9 @@ def add_vault_relation(test, harness):
     Args:
         test: TestCharm object.
         harness: ops.testing.Harness object used to simulate charm lifecycle.
+
+    Returns:
+        Vault relation ID.
     """
     harness.charm.on.install.emit()
     relation_id = harness.add_relation("vault", "vault-k8s")
@@ -212,6 +244,8 @@ def add_vault_relation(test, harness):
             "credentials": json.dumps(credentials, sort_keys=True),
         },
     )
+
+    return relation_id
 
 
 def simulate_lifecycle(harness, config):

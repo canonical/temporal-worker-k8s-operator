@@ -83,7 +83,10 @@ class VaultRelation(framework.Object):
         """Retrieve Vault configuration details.
 
         Returns:
-            A dictionary containing Vault configuration details if it exists
+            A dictionary containing Vault configuration details if it exists.
+
+        Raises:
+            ValueError: if unit_credentials were not successfully fetched.
         """
         relation = self.charm.model.get_relation("vault")
         if relation is None:
@@ -94,7 +97,7 @@ class VaultRelation(framework.Object):
         mount = self.charm.vault.get_mount(relation)
         unit_credentials = self.charm.vault.get_unit_credentials(relation)
         if not unit_credentials:
-            return None
+            raise ValueError("vault relation: failed to get unit_credentials")
 
         # unit_credentials is a juju secret id
         secret = self.charm.model.get_secret(id=unit_credentials)

@@ -331,7 +331,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if self.config["sentry-dsn"] and (sample_rate < 0 or sample_rate > 1):
             raise ValueError("Invalid config: sentry-sample-rate must be between 0 and 1")
 
-    def _update(self, event):
+    def _update(self, event):  # noqa: C901
         """Update the Temporal worker configuration and replan its execution.
 
         Args:
@@ -372,7 +372,12 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             }
         )
 
-        vault_config = self.vault_relation._get_vault_config()
+        try:
+            vault_config = self.vault_relation._get_vault_config()
+        except ValueError as err:
+            self.unit.status = BlockedStatus(str(err))
+            return
+
         if vault_config:
             context.update(vault_config)
             container.push(VAULT_CERT_PATH, vault_config.get("TWC_VAULT_CACERT_BYTES"), make_dirs=True)
