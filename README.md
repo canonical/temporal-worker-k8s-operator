@@ -65,6 +65,7 @@ The sample wheel file can be built by running `poetry build -f wheel` in the
 Once ready, the resource can be attached as follows:
 
 ```bash
+make -C resource_sample/ build
 juju attach-resource temporal-worker-k8s workflows-file=./resource_sample/dist/python_samples-1.1.0-py3-none-any.whl
 ```
 
@@ -153,11 +154,14 @@ storing workflow-related credentials in production environments. To enable this,
 run the following commands:
 
 ```bash
-juju deploy vault-k8s --channel edge
+juju deploy vault-k8s --channel 1.15/edge
 
 # After following Vault doc instructions to unseal Vault
 juju relate temporal-worker-k8s vault-k8s
 ```
+
+Note: The vault charm currently needs to be manually unsealed using the
+instructions found [here](https://charmhub.io/vault-k8s/docs/h-getting-started).
 
 For a reference on how to access credentials from Vault through the workflow
 code,
