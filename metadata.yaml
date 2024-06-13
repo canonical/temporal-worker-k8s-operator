@@ -61,3 +61,7 @@ requires:
   log-proxy:
     interface: loki_push_api
     limit: 1
+  vault:
+    interface: vault-kv
+    optional: true
+    limit: 1

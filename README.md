@@ -65,6 +65,7 @@ The sample wheel file can be built by running `poetry build -f wheel` in the
 Once ready, the resource can be attached as follows:
 
 ```bash
+make -C resource_sample/ build
 juju attach-resource temporal-worker-k8s workflows-file=./resource_sample/dist/python_samples-1.1.0-py3-none-any.whl
 ```
 
@@ -104,7 +105,7 @@ juju scale-application temporal-worker-k8s <num_of_replicas_required_replicas>
 
 The Temporal worker operator has a built-in Sentry interceptor which can be used
 to intercept and capture errors from the Temporal SDK. To enable it, run the
-following command:
+following commands:
 
 ```bash
 juju config temporal-worker-k8s sentry-dsn=<YOUR_SENTRY_DSN>
@@ -116,8 +117,8 @@ juju config temporal-worker-k8s sentry-environment="staging"
 
 The Temporal worker operator charm can be related to the
 [Canonical Observability Stack](https://charmhub.io/topics/canonical-observability-stack)
-in order to collect logs and telemetry.
-To deploy cos-lite and expose its endpoints as offers, follow these steps:
+in order to collect logs and telemetry. To deploy cos-lite and expose its
+endpoints as offers, follow these steps:
 
 ```bash
 # Deploy the cos-lite bundle:
@@ -137,13 +138,40 @@ juju relate temporal-worker-k8s admin/cos.loki
 juju relate temporal-worker-k8s admin/cos.prometheus
 ```
 
-
 ```bash
 # Access grafana with username "admin" and password:
 juju run grafana/0 -m cos get-admin-password --wait 1m
 # Grafana is listening on port 3000 of the app ip address.
 # Dashboard can be accessed under "Temporal Worker SDK Metrics", make sure to select the juju model which contains your Temporal worker operator charm.
 ```
+
+## Vault
+
+The Temporal worker operator charm can be related to the
+[Vault operator charm](https://charmhub.io/vault-k8s) to securely store
+credentials that can be accessed by workflows. This is the recommended way of
+storing workflow-related credentials in production environments. To enable this,
+run the following commands:
+
+```bash
+juju deploy vault-k8s --channel 1.15/edge
+
+# After following Vault doc instructions to unseal Vault
+juju relate temporal-worker-k8s vault-k8s
+```
+
+Note: The vault charm currently needs to be manually unsealed using the
+instructions found [here](https://charmhub.io/vault-k8s/docs/h-getting-started).
+
+For a reference on how to access credentials from Vault through the workflow
+code,
+[`activity2.py`](./resource_sample/resource_sample/activities/activity2.py)
+under the `resource_sample` directory shows a sample for writing and reading
+secrets in Vault.
+
+**Note**: At the time of writing, the Vault operator charm currently has
+compatibility issues with some versions of Juju (e.g. Juju `v3.2.4`). It has
+been tested successfully with Juju `v3.1.8`.
 
 ## Contributing
 

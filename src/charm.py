@@ -8,11 +8,13 @@
 
 import logging
 import re
+import secrets
 from pathlib import Path
 
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.vault_k8s.v0 import vault_kv
 from dotenv import dotenv_values
 from ops import main, pebble
 from ops.charm import CharmBase
@@ -36,6 +38,7 @@ from literals import (
     VALID_LOG_LEVELS,
 )
 from log import log_event_handler
+from relations.vault import VAULT_CERT_PATH, VAULT_NONCE_SECRET_LABEL, VaultRelation
 from state import State
 
 logger = logging.getLogger(__name__)
@@ -58,6 +61,15 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self.framework.observe(self.on.temporal_worker_pebble_ready, self._on_temporal_worker_pebble_ready)
         self.framework.observe(self.on.restart_action, self._on_restart)
         self.framework.observe(self.on.update_status, self._on_update_status)
+        self.framework.observe(self.on.install, self._on_install)
+
+        # Vault
+        self.vault = vault_kv.VaultKvRequires(
+            self,
+            relation_name="vault",
+            mount_suffix=self.app.name,
+        )
+        self.vault_relation = VaultRelation(self)
 
         # Prometheus
         self._prometheus_scraping = MetricsEndpointProvider(
@@ -72,6 +84,19 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         # Grafana
         self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
+
+    @log_event_handler(logger)
+    def _on_install(self, event):
+        """Handle on install event.
+
+        Args:
+            event: The event triggered on install.
+        """
+        self.unit.add_secret(
+            {"nonce": secrets.token_hex(16)},
+            label=VAULT_NONCE_SECRET_LABEL,
+            description="Nonce for vault-kv relation",
+        )
 
     @log_event_handler(logger)
     def _on_temporal_worker_pebble_ready(self, event):
@@ -306,7 +331,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if self.config["sentry-dsn"] and (sample_rate < 0 or sample_rate > 1):
             raise ValueError("Invalid config: sentry-sample-rate must be between 0 and 1")
 
-    def _update(self, event):
+    def _update(self, event):  # noqa: C901
         """Update the Temporal worker configuration and replan its execution.
 
         Args:
@@ -346,6 +371,25 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 "NO_PROXY": self.config["no-proxy"],
             }
         )
+
+        try:
+            vault_config = self.vault_relation._get_vault_config()
+        except ValueError as err:
+            self.unit.status = BlockedStatus(str(err))
+            return
+
+        if vault_config:
+            context.update(vault_config)
+            container.push(VAULT_CERT_PATH, vault_config.get("TWC_VAULT_CACERT_BYTES"), make_dirs=True)
+
+        # update vault relation if exists
+        binding = self.model.get_binding("vault")
+        if binding is not None:
+            try:
+                egress_subnet = str(binding.network.interfaces[0].subnet)
+                self.vault.request_credentials(event.relation, egress_subnet, self.vault_relation.get_vault_nonce())
+            except Exception as e:
+                logger.warning(f"failed to update vault relation - {repr(e)}")
 
         pebble_layer = {
             "summary": "temporal worker layer",
