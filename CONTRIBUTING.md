@@ -35,6 +35,9 @@ deployment, follow the following steps:
     # Install charmcraft from snap:
     sudo snap install charmcraft --classic
 
+    # Install Rockcraft from snap:
+    sudo snap install rockcraft --classic
+
     # Add the 'ubuntu' user to the Microk8s group:
     sudo usermod -a -G microk8s ubuntu
 
@@ -45,7 +48,7 @@ deployment, follow the following steps:
     newgrp microk8s
 
     # Enable the necessary Microk8s addons:
-    microk8s enable hostpath-storage dns
+    microk8s enable hostpath-storage dns registry
 
     # Install the Juju CLI client, juju:
     sudo snap install juju --classic
@@ -60,20 +63,17 @@ deployment, follow the following steps:
     juju model-config logging-config="<root>=INFO;unit=DEBUG"
 
     # Pack the charm:
-    charmcraft pack [--destructive-mode]
+    charmcraft pack
 
-    # Build wheel file:
-    cd resource_sample && poetry build -f wheel
+    # Build ROCK file and push it to local registry:
+    cd resource_sample_py && make build_rock
 
     # Deploy the charm:
-    juju deploy ./temporal-worker-k8s_ubuntu-22.04-amd64.charm --resource temporal-worker-image=python:3.8.2-slim-buster
+    juju deploy ./temporal-worker-k8s_ubuntu-22.04-amd64.charm --resource temporal-worker-image=localhost:32000/temporal-worker-rock
     juju config temporal-worker-k8s --file=path/to/config.yaml
 
-    # Attach wheel file resource:
-    juju attach-resource temporal-worker-k8s workflows-file=./resource_sample/dist/python_samples-1.1.0-py3-none-any.whl
-
     # Check progress:
-    juju status --relations --watch 1s
+    juju status --relations --watch 2s
     juju debug-log
 
     # Clean-up before retrying:
