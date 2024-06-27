@@ -1,9 +1,9 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+from common.messages import ComposeGreetingInput
 from temporalio import activity
-from dataclasses import dataclass
-from resource_sample.common.messages import ComposeGreetingInput
+
 
 # Basic activity that logs and does string concatenation
 @activity.defn(name="compose_greeting")

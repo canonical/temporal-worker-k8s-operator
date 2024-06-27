@@ -7,6 +7,7 @@
 import asyncio
 import logging
 import time
+from datetime import timedelta
 from pathlib import Path
 
 import yaml
@@ -23,9 +24,6 @@ APP_NAME_ADMIN = "temporal-admin-k8s"
 WORKER_CONFIG = {
     "namespace": "default",
     "queue": "test-queue",
-    "workflows-file-name": "python_samples-1.1.0-py3-none-any.whl",
-    "supported-workflows": "all",
-    "supported-activities": "all",
 }
 
 
@@ -63,10 +61,7 @@ async def run_sample_workflow(ops_test: OpsTest, workflow_type=None):
     # Execute workflow
     name = "Jean-luc"
     result = await client.execute_workflow(
-        workflow_name,
-        name,
-        id="my-workflow-id",
-        task_queue=WORKER_CONFIG["queue"],
+        workflow_name, name, id="my-workflow-id", task_queue=WORKER_CONFIG["queue"], run_timeout=timedelta(seconds=20)
     )
     logger.info(f"result: {result}")
     assert result == f"Hello, {name}!"
@@ -194,34 +189,23 @@ async def setup_temporal_ecosystem(ops_test: OpsTest):
         assert ops_test.model.applications[APP_NAME_SERVER].units[0].workload_status == "active"
 
 
-async def attach_worker_resource_file(ops_test: OpsTest, rsc_type="workflows"):
+async def attach_worker_invalid_env_file(ops_test: OpsTest):
     """Scale the application to the provided number and wait for idle.
 
     Args:
         ops_test: PyTest object.
-        rsc_type: Resource type.
     """
-    if rsc_type == "workflows":
-        rsc_name = "workflows-file"
-        rsc_path = "./resource_sample/dist/python_samples-1.1.0-py3-none-any.whl"
-    else:
-        rsc_name = "env-file"
-        rsc_path = "./resource_sample/invalid.env"
+    rsc_name = "env-file"
+    rsc_path = "./sample_files/invalid.env"
 
     logger.info(f"Attaching resource: {APP_NAME} {rsc_name}={rsc_path}")
     with open(rsc_path, "rb") as file:
         ops_test.model.applications[APP_NAME].attach_resource(rsc_name, rsc_path, file)
 
-    if rsc_type == "workflows":
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME], status="active", raise_on_error=False, raise_on_blocked=False, timeout=600
-        )
-        assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
-    else:
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME], status="blocked", raise_on_error=False, raise_on_blocked=False, timeout=600
-        )
-        assert ops_test.model.applications[APP_NAME].units[0].workload_status == "blocked"
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME], status="blocked", raise_on_error=False, raise_on_blocked=False, timeout=600
+    )
+    assert ops_test.model.applications[APP_NAME].units[0].workload_status == "blocked"
 
 
 async def read_vault_unit_statuses(ops_test: OpsTest):

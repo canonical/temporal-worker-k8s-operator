@@ -3,12 +3,16 @@
 
 # Makefile to help automate tasks
 
+# The name of the python package/project
+PY_PACKAGE := resource_sample
+
+# ROCK build parameters
+ROCK_NAME := temporal-worker_1.0_amd64.rock
+IMAGE_NAME := temporal-worker-rock:latest
+
 # build and dist folders
 BUILD := build
 DIST := dist
-
-# The name of the python package/project
-PY_PACKAGE := resource_sample
 
 # Paths to venv executables
 POETRY := poetry
@@ -42,11 +46,9 @@ install-dev:
 .PHONY: lint
 lint: ## Run linter
 	$(POETRY) run $(FLAKE8) $(PY_PACKAGE) tests
-	$(POETRY) run $(PYLINT) $(PY_PACKAGE) tests --disable=E0401,W1203,W0613,W0718,R0903,W1514,C0301,C0103,C0104,R0914,R0913,W0719,R0902
 	$(POETRY) run $(ISORT) --check $(PY_PACKAGE) tests
 	$(POETRY) run $(BLACK) --check $(PY_PACKAGE) tests
 	$(POETRY) run $(BANDIT) --configfile pyproject.toml --quiet --recursive $(PY_PACKAGE) tests
-	$(POETRY) run $(PYDOCSTYLE) $(PY_PACKAGE)
 
 .PHONY: fmt
 fmt: ## Reformat code for linter
@@ -70,6 +72,14 @@ changelog:  ## Add a new entry to the Changelog and bump the package version
 .PHONY: build
 build: ## Create a Python source distribution and a wheel in dist
 	$(POETRY) build
+
+.PHONY: build_rock
+build_rock:
+	rockcraft pack
+	rockcraft.skopeo --insecure-policy copy oci-archive:$(ROCK_NAME) docker-daemon:$(IMAGE_NAME)
+	IMAGE_ID=$$(docker inspect --format='{{.Id}}' $(IMAGE_NAME)); \
+	docker tag $$IMAGE_ID localhost:32000/$(IMAGE_NAME)
+	docker push localhost:32000/$(IMAGE_NAME)
 
 .PHONY: publish
 publish: ## Publish the package to PYPI

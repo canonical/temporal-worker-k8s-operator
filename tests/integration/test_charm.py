@@ -8,7 +8,7 @@ import logging
 
 import pytest
 from conftest import deploy  # noqa: F401, pylint: disable=W0611
-from helpers import attach_worker_resource_file, run_sample_workflow
+from helpers import attach_worker_invalid_env_file, run_sample_workflow
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -25,4 +25,4 @@ class TestDeployment:
 
     async def test_invalid_env_file(self, ops_test: OpsTest):
         """Attaches an invalid .env file to the worker."""
-        await attach_worker_resource_file(ops_test, rsc_type="env-file")
+        await attach_worker_invalid_env_file(ops_test)
