@@ -3,7 +3,7 @@
 
 # Temporal Worker K8s Operator
 
-This is the Kubernetes Python Operator for the Temporal worker.
+This is the Kubernetes Python Operator for the Temporal Worker.
 
 ## Description
 
@@ -13,18 +13,29 @@ execution of services and applications (using workflows).
 Use Workflow as Code (TM) to build and operate resilient applications. Leverage
 developer friendly primitives and avoid fighting your infrastructure
 
-This operator provides a Temporal worker, and consists of Python scripts which
+This operator provides a Temporal Worker, and consists of Python scripts which
 connect to a deployed Temporal server.
 
 ## Usage
 
 ### Deploying
 
-The Temporal worker operator can be deployed and connected to a deployed
+To deploy the Temporal Worker operator, you can start by creating a Temporal
+workflow, or use the one provided in
+[`resource_sample_py`](./resource_sample_py/). Once done, the project can be
+built as a [ROCK](https://documentation.ubuntu.com/rockcraft/en/stable/) and
+pushed to the [local registry](https://microk8s.io/docs/registry-built-in) by
+running the following command inside the `resource_sample_py` directory:
+
+```bash
+make build_rock
+```
+
+The Temporal Worker operator can then be deployed and connected to a deployed
 Temporal server using the Juju command line as follows:
 
 ```bash
-juju deploy temporal-worker-k8s
+juju deploy temporal-worker-k8s --resource temporal-worker-image=localhost:32000/temporal-worker-rock
 juju config temporal-worker-k8s --file=path/to/config.yaml
 ```
 
@@ -35,63 +46,44 @@ temporal-worker-k8s:
   host: "localhost:7233" # Replace with Temporal server hostname
   queue: "test-queue"
   namespace: "test"
-  workflows-file-name: "python_samples-1.1.0-py3-none-any.whl"
-  # To support all defined workflows and activities, use the 'all' keyword
-  supported-workflows: "all"
-  supported-activities: "all"
-```
-
-### Attaching "workflows-file" resource
-
-The Temporal worker operator expects a "workflows-file" resource to be attached
-after deployment, which contains a set of defined Temporal workflows and
-activities as defined in the [resource_sample](./resource_sample/) directory.
-The structure of the built wheel file must follow the same structure:
-
-```
-- workflows/
-    - workflow-a.py
-    - workflow-b.py
-- activities/
-    - activity-a.py
-    - activity-b.py
-- some_other_directory/
-- some_helper_file.py
-```
-
-The sample wheel file can be built by running `poetry build -f wheel` in the
-[resource_sample](./resource_sample/) directory.
-
-Once ready, the resource can be attached as follows:
-
-```bash
-make -C resource_sample/ build
-juju attach-resource temporal-worker-k8s workflows-file=./resource_sample/dist/python_samples-1.1.0-py3-none-any.whl
 ```
 
 Once done, the charm should enter an active state, indicating that the worker is
-running successfully. To verify this, you can check the logs of the kubernetes
-pod to ensure there are no errors with the workload container:
+running successfully. To verify this, you can check the logs of the juju unit to
+ensure there are no errors with the workload container:
 
 ```bash
-kubectl -n <juju_model_name> logs temporal-worker-k8s-0 -c temporal-worker -f
+juju ssh --container temporal-worker temporal-worker-k8s/0 /charm/bin/pebble logs temporal-worker -f
 ```
 
-Note: Files defined under the "workflows" directory must only contain classes
-decorated using the `@workflow.defn` decorator. Files defined under the
-"activities" directory must only contain methods decorated using the
-`@activity.defn` decorator. Any additional methods or classes needed should be
-defined in other files.
+Note: The only requirement for the ROCK is to have a `scripts/start-worker.sh`
+file, which will be used as the entry point for the charm to start the workload
+container.
+
+### Adding Environment Variables
+
+The Temporal Worker operator can be used to inject environment variables that
+can be ingested by your workflows. This can be done using the Juju command line as follows:
+
+```bash
+juju attach-resource temporal-worker-k8s env-file=path/to/.env
+```
+
+#### **`.env`**
+
+```
+VALUE=123
+```
 
 ## Verifying
 
-To verify that the setup is running correctly, run `juju status --watch 1s` and
+To verify that the setup is running correctly, run `juju status --watch 2s` and
 ensure the pod is active.
 
 To run a basic workflow, you may use a simple client (e.g.
 [sdk-python sample](https://github.com/temporalio/sdk-python#quick-start)) and
 connect to the same Temporal server. If run on the same namespace and task queue
-as the Temporal worker, it should be executed successfully.
+as the Temporal Worker, it should be executed successfully.
 
 ## Scaling
 
@@ -103,7 +95,7 @@ juju scale-application temporal-worker-k8s <num_of_replicas_required_replicas>
 
 ## Error Monitoring
 
-The Temporal worker operator has a built-in Sentry interceptor which can be used
+The Temporal Worker operator has a built-in Sentry interceptor which can be used
 to intercept and capture errors from the Temporal SDK. To enable it, run the
 following commands:
 
@@ -115,7 +107,7 @@ juju config temporal-worker-k8s sentry-environment="staging"
 
 ## Observability
 
-The Temporal worker operator charm can be related to the
+The Temporal Worker operator charm can be related to the
 [Canonical Observability Stack](https://charmhub.io/topics/canonical-observability-stack)
 in order to collect logs and telemetry. To deploy cos-lite and expose its
 endpoints as offers, follow these steps:
@@ -147,7 +139,7 @@ juju run grafana/0 -m cos get-admin-password --wait 1m
 
 ## Vault
 
-The Temporal worker operator charm can be related to the
+The Temporal Worker operator charm can be related to the
 [Vault operator charm](https://charmhub.io/vault-k8s) to securely store
 credentials that can be accessed by workflows. This is the recommended way of
 storing workflow-related credentials in production environments. To enable this,
@@ -165,7 +157,7 @@ instructions found [here](https://charmhub.io/vault-k8s/docs/h-getting-started).
 
 For a reference on how to access credentials from Vault through the workflow
 code,
-[`activity2.py`](./resource_sample/resource_sample/activities/activity2.py)
+[`activity2.py`](./resource_sample_py/resource_sample/activities/activity2.py)
 under the `resource_sample` directory shows a sample for writing and reading
 secrets in Vault.
 

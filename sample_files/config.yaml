@@ -5,6 +5,3 @@ temporal-worker-k8s:
   host: "temporal-k8s:7233"
   queue: "test-queue"
   namespace: "default"
-  workflows-file-name: "python_samples-1.1.0-py3-none-any.whl"
-  supported-workflows: "all"
-  supported-activities: "all"

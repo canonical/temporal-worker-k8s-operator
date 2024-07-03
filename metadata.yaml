@@ -35,17 +35,11 @@ peers:
 containers:
   temporal-worker:
     resource: temporal-worker-image
-    # Included for simplicity in integration tests.
-    upstream-source: python:3.8.2-slim-buster
 
 resources:
   temporal-worker-image:
     type: oci-image
     description: OCI image containing Python package.
-  workflows-file:
-    type: file
-    description: Wheel file containing Temporal workflows and activities.
-    filename: 'workflows-file.whl'
   env-file:
     type: file
     description: .env file containing environment variables to be sourced to the workload container.

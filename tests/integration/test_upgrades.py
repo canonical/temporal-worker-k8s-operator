@@ -12,7 +12,6 @@ from helpers import (
     APP_NAME,
     APP_NAME_SERVER,
     WORKER_CONFIG,
-    attach_worker_resource_file,
     get_application_url,
     run_sample_workflow,
     setup_temporal_ecosystem,
@@ -41,8 +40,12 @@ async def deploy(ops_test: OpsTest):
 
         url = await get_application_url(ops_test, application=APP_NAME_SERVER, port=7233)
         await ops_test.model.applications[APP_NAME].set_config({"host": url})
-
-        await attach_worker_resource_file(ops_test)
+        await ops_test.model.wait_for_idle(
+            apps=[APP_NAME],
+            status="active",
+            raise_on_blocked=False,
+            timeout=600,
+        )
 
 
 @pytest.mark.abort_on_fail

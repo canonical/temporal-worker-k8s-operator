@@ -31,16 +31,6 @@ options:
     default: ""
     type: string
 
-  supported-workflows:
-    description: Comma-separated list of workflow names to extract from attached wheel file.
-    default: ""
-    type: string
-
-  supported-activities:
-    description: Comma-separated list of workflow activities to extract from attached wheel file.
-    default: ""
-    type: string
-
   sentry-dsn:
     description: Sentry Data Source Name to send events to.
     default: ""
@@ -68,11 +58,6 @@ options:
     
     default: 1.0
     type: float
-
-  workflows-file-name:
-    description: Name of the wheel file resource attached to the charm.
-    default: ""
-    type: string
 
   encryption-key:
     description: Base64-encoded key used for data encryption.
@@ -159,20 +144,5 @@ options:
 
   oidc-client-cert-url:
     description: Client certificate URL for OIDC authentication.
-    default: ""
-    type: string
-
-  http-proxy:
-    description: Used to set HTTP_PROXY environment variable.
-    default: ""
-    type: string
-
-  https-proxy:
-    description: Used to set HTTPS_PROXY environment variable.
-    default: ""
-    type: string
-
-  no-proxy:
-    description: Used to set NO_PROXY environment variable.
     default: ""
     type: string
