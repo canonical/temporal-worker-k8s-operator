@@ -180,7 +180,7 @@ secrets in Vault.
 
 **Note**: At the time of writing, the Vault operator charm currently has
 compatibility issues with some versions of Juju (e.g. Juju `v3.2.4`). It has
-been tested successfully with Juju `v3.1.8`.
+been tested successfully with Juju `v3.3.5`.
 
 ## Contributing
 
