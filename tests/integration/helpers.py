@@ -278,7 +278,7 @@ async def wait_for_vault_status_message(
 
 
 async def authorize_charm(ops_test: OpsTest, root_token: str):
-    """Authorize the charm by executing the 'authorize-charm' action on the leader unit.
+    """Authorize the Vault charm by executing the 'authorize-charm' action on the leader unit.
 
     Args:
         ops_test: Ops test Framework.
@@ -289,10 +289,13 @@ async def authorize_charm(ops_test: OpsTest, root_token: str):
     """
     assert ops_test.model
     leader_unit = await get_leader_unit(ops_test.model, "vault-k8s")
+    secret = await ops_test.model.add_secret("approle-token-vault-k8s", [f"token={root_token}"])
+    secret_id = secret.split(":")[-1]
+    await ops_test.model.grant_secret("approle-token-vault-k8s", "vault-k8s")
     authorize_action = await leader_unit.run_action(
         action_name="authorize-charm",
         **{
-            "token": root_token,
+            "secret-id": secret_id,
         },
     )
     result = await ops_test.model.get_action_output(action_uuid=authorize_action.entity_id, wait=120)
