@@ -180,7 +180,8 @@ secrets in Vault.
 
 **Note**: At the time of writing, the Vault operator charm currently has
 compatibility issues with some versions of Juju (e.g. Juju `v3.2.4`). It has
-been tested successfully with Juju `v3.3.5`.
+been tested successfully with Juju
+[`v3.3.5`](https://github.com/canonical/temporal-worker-k8s-operator/actions/runs/9874524137/job/27269330380).
 
 ## Contributing
 
