@@ -202,7 +202,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             if self.unit.is_leader():
                 self._state.env = env
         except ModelError as err:
-            logger.error(err)
+            logger.debug("env-file resource not found %s", err)
 
     def _check_required_config(self, config_list):
         """Check if required config has been set by user.

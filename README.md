@@ -63,7 +63,8 @@ container.
 ### Adding Environment Variables
 
 The Temporal Worker operator can be used to inject environment variables that
-can be ingested by your workflows. This can be done using the Juju command line as follows:
+can be ingested by your workflows. This can be done using the Juju command line
+as follows:
 
 ```bash
 juju attach-resource temporal-worker-k8s env-file=path/to/.env
@@ -84,6 +85,22 @@ To run a basic workflow, you may use a simple client (e.g.
 [sdk-python sample](https://github.com/temporalio/sdk-python#quick-start)) and
 connect to the same Temporal server. If run on the same namespace and task queue
 as the Temporal Worker, it should be executed successfully.
+
+## Enable Proxy
+
+To enable the Temporal worker charm to use an HTTP proxy, the following Juju
+model configurations can be set. The charm will read these values and set the
+`HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` environment in the workload container
+respectively.
+
+```bash
+juju model-config juju-http-proxy="<http_proxy>"
+juju model-config juju-https-proxy="<https_proxy>"
+juju model-config juju-no-proxy="<no_proxy>"
+```
+
+A config change may be needed if your charm is already deployed to force the
+charm to re-initialize.
 
 ## Scaling
 
@@ -163,7 +180,8 @@ secrets in Vault.
 
 **Note**: At the time of writing, the Vault operator charm currently has
 compatibility issues with some versions of Juju (e.g. Juju `v3.2.4`). It has
-been tested successfully with Juju `v3.1.8`.
+been tested successfully with Juju
+[`v3.3.5`](https://github.com/canonical/temporal-worker-k8s-operator/actions/runs/9874524137/job/27269330380).
 
 ## Contributing
 
