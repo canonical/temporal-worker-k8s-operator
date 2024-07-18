@@ -6,13 +6,23 @@
 """Temporal worker charm unit tests."""
 
 import json
-from unittest import TestCase
+from textwrap import dedent
+from unittest import TestCase, mock
 
+import yaml
+from ops.jujuversion import JujuVersion
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 from ops.testing import Harness
 
 from charm import TemporalWorkerK8SOperatorCharm
-from tests.unit.literals import CONFIG, CONTAINER_NAME, EXPECTED_VAULT_ENV, WANT_ENV
+from tests.unit.literals import (
+    CONFIG,
+    CONTAINER_NAME,
+    EXPECTED_VAULT_ENV,
+    SECRETS_CONFIG,
+    VAULT_CONFIG,
+    WANT_ENV,
+)
 
 
 class TestCharm(TestCase):
@@ -128,6 +138,119 @@ class TestCharm(TestCase):
         got_plan = harness.get_container_pebble_plan("temporal-worker").to_dict()
         self.assertEqual(got_plan, want_plan)
 
+    def test_invalid_secrets_config(self):
+        """The charm raises goes into a blocked state if secrets config is incorrectly formatted."""
+        harness = self.harness
+
+        simulate_lifecycle(harness, CONFIG)
+        harness.charm.on.config_changed.emit()
+        invalid_secrets_config_env = dedent(
+            """
+        secrets:
+            env:
+              - hello: world
+                wrong: key
+        """
+        )
+
+        # with self.assertRaises(ValueError):
+        harness.update_config({"secrets": invalid_secrets_config_env})
+        self.assertEqual(
+            harness.model.unit.status,
+            BlockedStatus("Invalid secrets structure: 'env' should be a list of single-key dictionaries"),
+        )
+
+        invalid_secrets_config_juju = dedent(
+            """
+        secrets:
+            juju:
+              - wrong: key
+                key: hello
+        """
+        )
+
+        harness.update_config({"secrets": invalid_secrets_config_juju})
+        self.assertEqual(
+            harness.model.unit.status,
+            BlockedStatus("Invalid secrets structure: 'juju' should be a list of dictionaries with 'secret-id' and 'key'"),
+        )
+
+        invalid_secrets_config_vault = dedent(
+            """
+        secrets:
+            vault:
+              - path: path
+                value: wrong
+        """
+        )
+
+        harness.update_config({"secrets": invalid_secrets_config_vault})
+        self.assertEqual(
+            harness.model.unit.status,
+            BlockedStatus("Invalid secrets structure: 'vault' should be a list of dictionaries with 'path' and 'key'"),
+        )
+
+    @mock.patch("ops.jujuversion.JujuVersion.from_environ")
+    @mock.patch("relations.vault.VaultRelation.get_vault_config", return_value=VAULT_CONFIG)
+    @mock.patch("vault_client.VaultClient._authenticate", return_value=None)
+    @mock.patch("vault_client.VaultClient.read_secret", return_value="token_secret")
+    def test_valid_secrets_config(self, get_vault_config, _authenticate, read_secret, mock_from_environ):
+        """The charm parses the secret config correctly."""
+        harness = self.harness
+
+        # Mock JujuVersion.from_environ().has_secrets
+        mock_juju_version = mock.Mock()
+        mock_juju_version.has_secrets = True
+        mock_from_environ.return_value = mock_juju_version
+
+        secret_id = simulate_lifecycle(harness, CONFIG)
+        add_vault_relation(self, harness)
+        self.harness.update_config({})
+
+        secret_config = dedent(
+            f"""
+        secrets:
+            env:
+                - hello: world
+                - test: variable
+            juju:
+                - secret-id: {secret_id}
+                  key: sensitive1
+                - secret-id: {secret_id}
+                  key: sensitive2
+            vault:
+                - path: secrets
+                  key: token
+        """
+        )
+        harness.update_config({"secrets": secret_config})
+
+        want_plan = {
+            "services": {
+                "temporal-worker": {
+                    "summary": "temporal worker",
+                    "command": "./app/scripts/start-worker.sh",
+                    "startup": "enabled",
+                    "override": "replace",
+                    "environment": {
+                        **WANT_ENV,
+                        **EXPECTED_VAULT_ENV,
+                        # User added secrets through config
+                        **{
+                            "hello": "world",
+                            "test": "variable",
+                            "sensitive1": "hello",
+                            "sensitive2": "world",
+                            "token": "token_secret",
+                        },
+                    },
+                }
+            },
+        }
+
+        got_plan = harness.get_container_pebble_plan("temporal-worker").to_dict()
+        self.assertEqual(got_plan, want_plan)
+
 
 def add_vault_relation(test, harness):
     """Add vault relation to harness.
@@ -184,3 +307,10 @@ def simulate_lifecycle(harness, config):
     harness.charm.on.temporal_worker_pebble_ready.emit(container)
 
     harness.update_config(config)
+
+    secret_id = harness.add_model_secret(
+        "temporal-worker-k8s",
+        {"sensitive1": "hello", "sensitive2": "world"},
+    )
+
+    return secret_id

@@ -79,7 +79,7 @@ class VaultRelation(framework.Object):
             logger.debug(f"Secret {VAULT_NONCE_SECRET_LABEL} not found: {e}")
             raise ModelError from e
 
-    def _get_vault_config(self):
+    def get_vault_config(self):
         """Retrieve Vault configuration details.
 
         Returns:
@@ -106,10 +106,10 @@ class VaultRelation(framework.Object):
         role_secret_id = secret_content["role-secret-id"]
 
         return {
-            "TWC_VAULT_ADDR": vault_url,
-            "TWC_VAULT_CACERT_BYTES": ca_certificate,
-            "TWC_VAULT_ROLE_ID": role_id,
-            "TWC_VAULT_ROLE_SECRET_ID": role_secret_id,
-            "TWC_VAULT_MOUNT": mount,
-            "TWC_VAULT_CERT_PATH": VAULT_CERT_PATH,
+            "vault_address": vault_url,
+            "vault_ca_certificate_bytes": ca_certificate,
+            "vault_role_id": role_id,
+            "vault_role_secret_id": role_secret_id,
+            "vault_mount": mount,
+            "vault_cert_path": VAULT_CERT_PATH,
         }

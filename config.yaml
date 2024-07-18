@@ -146,3 +146,7 @@ options:
     description: Client certificate URL for OIDC authentication.
     default: ""
     type: string
+
+  secrets:
+    description: placeholder
+    type: string

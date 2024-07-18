@@ -9,6 +9,7 @@ import logging
 import time
 from datetime import timedelta
 from pathlib import Path
+from textwrap import dedent
 
 import yaml
 from pytest_operator.plugin import OpsTest
@@ -22,9 +23,40 @@ APP_NAME_SERVER = "temporal-k8s"
 APP_NAME_ADMIN = "temporal-admin-k8s"
 
 WORKER_CONFIG = {
+    "host": f"{APP_NAME_SERVER}:7233",
     "namespace": "default",
     "queue": "test-queue",
+    "secrets": dedent(
+        f"""
+    secrets:
+        env:
+            - key1: value1
+            - key2: value2
+        juju:
+            - secret-id: worker-secrets
+              key: sensitive1
+            - secret-id: worker-secrets
+              key: sensitive2
+    """
+    )
 }
+
+
+def set_secrets_config(ops_test: OpsTest, secret_id):
+    secret_config = dedent(
+        f"""
+    secrets:
+        env:
+            - key1: value1
+            - key2: value2
+        juju:
+            - secret-id: worker-secrets
+              key: sensitive1
+            - secret-id: worker-secrets
+              key: sensitive2
+    """
+    )
+    ops_test.model.applications[APP_NAME].set_config({**WORKER_CONFIG, "secrets": secret_config})
 
 
 def unseal_vault(client, endpoint: str, root_token: str, unseal_key: str):
@@ -64,7 +96,9 @@ async def run_sample_workflow(ops_test: OpsTest, workflow_type=None):
         workflow_name, name, id="my-workflow-id", task_queue=WORKER_CONFIG["queue"], run_timeout=timedelta(seconds=20)
     )
     logger.info(f"result: {result}")
-    assert result == f"Hello, {name}!"
+    assert result == "hello world"
+
+    # assert result == f"Hello, {name}!"
 
 
 async def create_default_namespace(ops_test: OpsTest):

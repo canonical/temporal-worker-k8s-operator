@@ -10,6 +10,7 @@ import logging
 import os
 import secrets
 
+import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
@@ -17,11 +18,13 @@ from charms.vault_k8s.v0 import vault_kv
 from dotenv import dotenv_values
 from ops import main, pebble
 from ops.charm import CharmBase
+from ops.jujuversion import JujuVersion
 from ops.model import (
     ActiveStatus,
     BlockedStatus,
     MaintenanceStatus,
     ModelError,
+    SecretNotFoundError,
     WaitingStatus,
 )
 
@@ -37,6 +40,7 @@ from literals import (
 from log import log_event_handler
 from relations.vault import VAULT_CERT_PATH, VAULT_NONCE_SECRET_LABEL, VaultRelation
 from state import State
+from vault_client import VaultClient
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +63,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self.framework.observe(self.on.restart_action, self._on_restart)
         self.framework.observe(self.on.update_status, self._on_update_status)
         self.framework.observe(self.on.install, self._on_install)
+        self.framework.observe(self.on.add_vault_secret_action, self._on_add_vault_secret)
 
         # Vault
         self.vault = vault_kv.VaultKvRequires(
@@ -117,13 +122,49 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         """
         container = self.unit.get_container(self.name)
         if not container.can_connect():
-            event.defer()
+            event.fail("Failed to connect to the container")
             return
 
         self.unit.status = MaintenanceStatus("restarting worker")
         container.restart(self.name)
 
         event.set_results({"result": "worker successfully restarted"})
+
+    @log_event_handler(logger)
+    def _on_add_vault_secret(self, event):
+        """Add Vault secret action handler.
+
+        Args:
+            event:The event triggered by the restart action
+        """
+        container = self.unit.get_container(self.name)
+        if not container.can_connect():
+            event.fail("Failed to connect to the container")
+            return
+
+        vault_config = self.vault_relation.get_vault_config()
+        if not vault_config:
+            event.fail("No Vault relation found")
+
+        path, key, value = (event.params.get(param) for param in ["path", "key", "value"])
+        if not all([path, key, value]):
+            event.fail("`path`, `key` and `value` are required parameters")
+
+        try:
+            vault_client = VaultClient(
+                address=vault_config["address"],
+                cert_path=vault_config["cert_path"],
+                role_id=vault_config["role_id"],
+                role_secret_id=vault_config["role_secret_id"],
+                mount_point=vault_config["mount_path"],
+            )
+
+            vault_client.write_secret(path=path, data={key: value})
+        except Exception as e:
+            event.fail(e)
+            return
+
+        event.set_results({"result": "secret successfully created"})
 
     @log_event_handler(logger)
     def _on_config_changed(self, event):
@@ -172,37 +213,45 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         except pebble.ConnectionError:
             return False
 
-    def _process_env_file(self, event):
-        """Process env file attached by user.
+    def create_env(self, parsed_secrets_data):
+        charm_env = {}
+        if parsed_secrets_data.get("juju") and not JujuVersion.from_environ().has_secrets:
+            raise ValueError("")
 
-        This method extracts the env file provided by the user and stores the data in the
-        charm's data bucket.
+        if parsed_secrets_data.get("vault") and not self.model.relations["vault"]:
+            raise ValueError("")
 
-        Args:
-            event: The event triggered when the relation changed.
+        env_variables = parsed_secrets_data.get("env")
+        for key, value in env_variables.items():
+            charm_env.update({key: value})
 
-        Raises:
-            ValueError: if env file contains variable starting with reserved prefix.
-        """
-        if not self._state.is_ready():
-            event.defer()
-            return
+        juju_variables = parsed_secrets_data.get("juju")
+        for secret in juju_variables:
+            try:
+                secret_id = secret.get("secret-id")
+                key = secret.get("key")
+                secret = self.model.get_secret(label=secret_id)
+                secret_content = secret.get_content()
+                charm_env.update({key: secret_content[key]})
+            except (SecretNotFoundError, ModelError, KeyError) as e:
+                raise ValueError("Error parsing secrets env: %s", e)
 
-        if self.unit.is_leader():
-            self._state.env = None
+        if self.model.relations["vault"]:
+            vault_config = self.vault_relation.get_vault_config()
+            vault_client = VaultClient(
+                address=vault_config["vault_address"],
+                cert_path=vault_config["vault_cert_path"],
+                role_id=vault_config["vault_role_id"],
+                role_secret_id=vault_config["vault_role_secret_id"],
+                mount_point=vault_config["vault_mount"],
+            )
+            vault_variables = parsed_secrets_data.get("vault")
+            for item in vault_variables:
+                key = item.get("key")
+                secret = vault_client.read_secret(item.get("path"), key)
+                charm_env.update({key: secret})
 
-        try:
-            resource_path = self.model.resources.fetch("env-file")
-            env = dotenv_values(resource_path)
-
-            for key, _ in env.items():
-                if key.startswith("TWC_"):
-                    raise ValueError("Invalid state: 'TWC_' env variable prefix is reserved")
-
-            if self.unit.is_leader():
-                self._state.env = env
-        except ModelError as err:
-            logger.debug("env-file resource not found %s", err)
+        return charm_env
 
     def _check_required_config(self, config_list):
         """Check if required config has been set by user.
@@ -233,7 +282,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if not self._state.is_ready():
             raise ValueError("peer relation not ready")
 
-        self._process_env_file(event)
+        # self._process_env_file(event)
 
         self._check_required_config(REQUIRED_CHARM_CONFIG)
 
@@ -249,6 +298,13 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         sample_rate = self.config["sentry-sample-rate"]
         if self.config["sentry-dsn"] and (sample_rate < 0 or sample_rate > 1):
             raise ValueError("Invalid config: sentry-sample-rate must be between 0 and 1")
+
+        secrets = self.config.get("secrets")
+        if secrets:
+            try:
+                yaml.safe_load(secrets)
+            except (yaml.parser.ParserError, yaml.scanner.ScannerError) as e:
+                raise ValueError(f"Incorrectly formatted `secrets` config: {e}") from e
 
     def _update(self, event):  # noqa: C901
         """Update the Temporal worker configuration and replan its execution.
@@ -271,8 +327,17 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         logger.info("Configuring Temporal worker")
 
         context = {}
-        if self._state.env:
-            context.update(self._state.env)
+        secrets = self.config.get("secrets")
+        if secrets:
+            try:
+                parsed_secrets_data = parse_secrets(secrets)
+            except ValueError as err:
+                self.unit.status = BlockedStatus(str(err))
+                return
+
+            charm_config_env = self.create_env(parsed_secrets_data)
+            # context.update({convert_env_var(key): value for key, value in charm_config_env.items()})
+            context.update(charm_config_env)
 
         proxy_vars = {
             "HTTP_PROXY": "JUJU_CHARM_HTTP_PROXY",
@@ -285,18 +350,17 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             if value:
                 context.update({key: value})
 
-        context.update({convert_env_var(key): value for key, value in self.config.items()})
+        context.update({convert_env_var(key): value for key, value in self.config.items() if key not in ["secrets"]})
         context.update({"TWC_PROMETHEUS_PORT": PROMETHEUS_PORT})
-
         try:
-            vault_config = self.vault_relation._get_vault_config()
+            vault_config = self.vault_relation.get_vault_config()
         except ValueError as err:
             self.unit.status = BlockedStatus(str(err))
             return
 
         if vault_config:
-            context.update(vault_config)
-            container.push(VAULT_CERT_PATH, vault_config.get("TWC_VAULT_CACERT_BYTES"), make_dirs=True)
+            context.update({convert_env_var(key): value for key, value in vault_config.items()})
+            container.push(VAULT_CERT_PATH, vault_config.get("vault_ca_certificate_bytes"), make_dirs=True)
 
         # update vault relation if exists
         binding = self.model.get_binding("vault")
@@ -324,6 +388,51 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         container.replan()
 
         self.unit.status = MaintenanceStatus("replanning application")
+
+
+def parse_secrets(yaml_string):
+    data = yaml.safe_load(yaml_string)
+
+    # Validate the main structure
+    if not isinstance(data, dict) or "secrets" not in data:
+        raise ValueError("Invalid secrets structure: 'secrets' key not found")
+
+    secrets = data["secrets"]
+    if not isinstance(secrets, dict):
+        raise ValueError("Invalid secrets structure: 'secrets' should be a dictionary")
+
+    # Validate env key
+    env = secrets.get("env", [])
+    if not isinstance(env, list) or not all(isinstance(item, dict) and len(item) == 1 for item in env):
+        raise ValueError("Invalid secrets structure: 'env' should be a list of single-key dictionaries")
+
+    # Validate juju key
+    juju = secrets.get("juju", [])
+    if not isinstance(juju, list) or not all(
+        isinstance(item, dict) and "secret-id" in item and "key" in item and len(item) == 2 for item in juju
+    ):
+        raise ValueError(
+            "Invalid secrets structure: 'juju' should be a list of dictionaries with 'secret-id' and 'key'"
+        )
+
+    # Validate vault key
+    vault = secrets.get("vault", [])
+    if not isinstance(vault, list) or not all(
+        isinstance(item, dict) and "path" in item and "key" in item and len(item) == 2 for item in vault
+    ):
+        raise ValueError("Invalid secrets structure: 'vault' should be a list of dictionaries with 'path' and 'key'")
+
+    env = secrets.get("env", [])
+    juju = secrets.get("juju", [])
+    vault = secrets.get("vault", [])
+
+    parsed_data = {
+        "env": {list(item.keys())[0]: list(item.values())[0] for item in env},
+        "juju": [{"secret-id": item.get("secret-id"), "key": item.get("key")} for item in juju],
+        "vault": [{"path": item.get("path"), "key": item.get("key")} for item in vault],
+    }
+
+    return parsed_data
 
 
 def convert_env_var(config_var, prefix="TWC_"):
