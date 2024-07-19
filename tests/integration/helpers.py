@@ -60,9 +60,9 @@ def get_worker_config(secret_id):
                 - key2: value2
             juju:
                 - secret-id: {secret_id}
-                key: sensitive1
+                  key: sensitive1
                 - secret-id: {secret_id}
-                key: sensitive2
+                  key: sensitive2
         """
         ),
     }
