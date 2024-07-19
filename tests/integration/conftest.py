@@ -63,9 +63,8 @@ async def deploy(ops_test: OpsTest, charm: str, temporal_worker_image: str):
     await ops_test.model.deploy(charm, resources=resources, config=worker_config, application_name=APP_NAME)
     await ops_test.model.grant_secret("worker-secrets", APP_NAME)
 
-    await ops_test.model.applications[APP_NAME].set_config({"host": f"{APP_NAME_SERVER}:7233"})
-
     await setup_temporal_ecosystem(ops_test)
+    await ops_test.model.applications[APP_NAME].set_config({"host": f"{APP_NAME_SERVER}:7233"})
 
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
