@@ -261,16 +261,10 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
                 secret_content = secret.get_content(refresh=True)
                 charm_env.update({key: secret_content[key]})
-            except SecretNotFoundError:
-                raise SecretNotFoundError
-                # raise ValueError(f"Secret `{secret_id or secret_name}` not found")
-            except ModelError:
-                raise ModelError
-                # logger.error(f"SECRET ID: {secret_id}")
-                # logger.error(f"SECRET NAME: {secret_name}")
-                # logger.error(f"Secret `{secret_id or secret_name}` not found or access not granted to charm")
-                # raise ValueError(f"Access to secret `{secret_id or secret_name}` not granted to charm")
-            # except (SecretNotFoundError, ModelError, KeyError) as e:
+            # except SecretNotFoundError:
+            #     raise SecretNotFoundError
+            # except ModelError:
+            #     raise ModelError
             except KeyError as e:
                 logger.error(f"Error parsing secrets env: {e}")
                 raise ValueError(f"Error parsing secrets env: {e}") from e
@@ -343,23 +337,18 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             except (yaml.parser.ParserError, yaml.scanner.ScannerError) as e:
                 raise ValueError(f"Incorrectly formatted `secrets` config: {e}") from e
 
-        try:
-            secrets_config = self.config.get("secrets")
-            if secrets_config:
-                parsed_secrets_data = parse_secrets(secrets_config)
-                charm_config_env = self.create_env(parsed_secrets_data)
-                # context.update(charm_config_env)
-        except SecretNotFoundError:
-            raise SecretNotFoundError
-            # self.unit.status = WaitingStatus("juju secrets not found yet")
-            # return
-        except ModelError:
-            raise ModelError
-            # self.unit.status = WaitingStatus("access to juju secrets not granted to charm")
-            # return
-        except ValueError as err:
-            self.unit.status = BlockedStatus(str(err))
-            return
+        # try:
+        secrets_config = self.config.get("secrets")
+        if secrets_config:
+            parsed_secrets_data = parse_secrets(secrets_config)
+            self.create_env(parsed_secrets_data)
+        # except SecretNotFoundError:
+        #     raise SecretNotFoundError
+        # except ModelError:
+        #     raise ModelError
+        # except ValueError as err:
+        #     self.unit.status = BlockedStatus(str(err))
+        #     return
 
     def _update(self, event):  # noqa: C901
         """Update the Temporal worker configuration and replan its execution.

@@ -22,34 +22,17 @@ APP_NAME = METADATA["name"]
 APP_NAME_SERVER = "temporal-k8s"
 APP_NAME_ADMIN = "temporal-admin-k8s"
 
-WORKER_CONFIG = {
-    "host": f"{APP_NAME_SERVER}:7233",
-    "namespace": "default",
-    "queue": "test-queue",
-    "secrets": dedent(
-        """
-    secrets:
-        env:
-            - key1: value1
-            - key2: value2
-        juju:
-            - secret-name: worker-secrets
-              key: sensitive1
-            - secret-name: worker-secrets
-              key: sensitive2
-    """
-    ),
-}
-
 
 def get_worker_config(secret_id):
     """Get worker charm config.
 
     Args:
         secret_id: Juju secret id.
+
+    Returns:
+        Temporal worker charm config
     """
     return {
-        "host": f"{APP_NAME_SERVER}:7233",
         "namespace": "default",
         "queue": "test-queue",
         "secrets": dedent(
@@ -93,7 +76,9 @@ async def run_sample_workflow(ops_test: OpsTest, workflow_type=None):
     url = await get_application_url(ops_test, application=APP_NAME_SERVER, port=7233)
     logger.info("running workflow on app address: %s", url)
 
-    client = await Client.connect(Options(host=url, queue=WORKER_CONFIG["queue"], namespace=WORKER_CONFIG["namespace"]))
+    client = await Client.connect(
+        Options(host=url, queue=get_worker_config(None)["queue"], namespace=get_worker_config(None)["namespace"])
+    )
 
     workflow_name = "GreetingWorkflow"
     if workflow_type == "vault":
@@ -102,7 +87,11 @@ async def run_sample_workflow(ops_test: OpsTest, workflow_type=None):
     # Execute workflow
     name = "Jean-luc"
     result = await client.execute_workflow(
-        workflow_name, name, id="my-workflow-id", task_queue=WORKER_CONFIG["queue"], run_timeout=timedelta(seconds=20)
+        workflow_name,
+        name,
+        id="my-workflow-id",
+        task_queue=get_worker_config(None)["queue"],
+        run_timeout=timedelta(seconds=20),
     )
     logger.info(f"result: {result}")
     assert result == "hello world"
