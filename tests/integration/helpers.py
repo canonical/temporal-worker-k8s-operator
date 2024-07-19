@@ -33,9 +33,9 @@ WORKER_CONFIG = {
             - key1: value1
             - key2: value2
         juju:
-            - secret-id: worker-secrets
+            - secret-name: worker-secrets
               key: sensitive1
-            - secret-id: worker-secrets
+            - secret-name: worker-secrets
               key: sensitive2
     """
     ),

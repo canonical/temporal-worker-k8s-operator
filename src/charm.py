@@ -238,12 +238,19 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             charm_env.update({key: value})
 
         juju_variables = parsed_secrets_data.get("juju")
-        for secret in juju_variables:
+        for juju_secret in juju_variables:
             try:
                 # TODO (kelkawi-a): update this to either check for secret-id or secret-name
-                secret_id = secret.get("secret-id")
-                key = secret.get("key")
-                secret = self.model.get_secret(label=secret_id)
+                secret_id = juju_secret.get("secret-id")
+                secret_name = juju_secret.get("secret-name")
+                key = juju_secret.get("key")
+
+                secret = None
+                if secret_id:
+                    secret = self.model.get_secret(id=secret_id)
+                else:
+                    secret = self.model.get_secret(label=secret_name)
+
                 secret_content = secret.get_content()
                 charm_env.update({key: secret_content[key]})
             except (SecretNotFoundError, ModelError, KeyError) as e:
@@ -409,7 +416,7 @@ def parse_secrets(yaml_string):
     The YAML string should contain a 'secrets' key with nested 'env', 'juju', and 'vault' keys.
     Each nested key should follow a specific structure:
         - 'env': A list of single-key dictionaries.
-        - 'juju': A list of dictionaries with 'secret-id' and 'key' keys.
+        - 'juju': A list of dictionaries with 'secret-id' or 'secret-name', and 'key' keys.
         - 'vault': A list of dictionaries with 'path' and 'key' keys.
 
     Args:
@@ -420,7 +427,7 @@ def parse_secrets(yaml_string):
               The structure of the returned dictionary is:
               {
                   "env": {str: str},
-                  "juju": [{"secret-id": str, "key": str}],
+                  "juju": [{"secret-id" or "secret-name": str, "key": str}],
                   "vault": [{"path": str, "key": str}]
               }
 
@@ -445,11 +452,18 @@ def parse_secrets(yaml_string):
     # Validate juju key
     juju = secrets_key.get("juju", [])
     if not isinstance(juju, list) or not all(
-        isinstance(item, dict) and "secret-id" in item and "key" in item and len(item) == 2 for item in juju
+        isinstance(item, dict) and "key" in item and (("secret-id" in item or "secret-name" in item) and len(item) == 2)
+        for item in juju
     ):
         raise ValueError(
-            "Invalid secrets structure: 'juju' should be a list of dictionaries with 'secret-id' and 'key'"
+            "Invalid secrets structure: 'juju' should be a list of dictionaries with 'key' and either 'secret-id' or 'secret-name'"
         )
+    # Ensure only one of 'secret-id' or 'secret-name' is present
+    for item in juju:
+        if "secret-id" in item and "secret-name" in item:
+            raise ValueError(
+                "Invalid secrets structure: 'juju' dictionaries should have either 'secret-id' or 'secret-name', but not both"
+            )
 
     # Validate vault key
     vault = secrets_key.get("vault", [])
@@ -464,7 +478,10 @@ def parse_secrets(yaml_string):
 
     parsed_data = {
         "env": {list(item.keys())[0]: list(item.values())[0] for item in env},
-        "juju": [{"secret-id": item.get("secret-id"), "key": item.get("key")} for item in juju],
+        "juju": [
+            {"secret-id": item.get("secret-id"), "secret-name": item.get("secret-name"), "key": item.get("key")}
+            for item in juju
+        ],
         "vault": [{"path": item.get("path"), "key": item.get("key")} for item in vault],
     }
 

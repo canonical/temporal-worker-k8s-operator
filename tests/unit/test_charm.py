@@ -170,7 +170,7 @@ class TestCharm(TestCase):
         self.assertEqual(
             harness.model.unit.status,
             BlockedStatus(
-                "Invalid secrets structure: 'juju' should be a list of dictionaries with 'secret-id' and 'key'"
+                "Invalid secrets structure: 'juju' should be a list of dictionaries with 'key' and either 'secret-id' or 'secret-name'"
             ),
         )
 
