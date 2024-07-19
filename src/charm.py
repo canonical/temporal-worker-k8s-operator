@@ -351,11 +351,11 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if secrets_config:
             try:
                 parsed_secrets_data = parse_secrets(secrets_config)
+                charm_config_env = self.create_env(parsed_secrets_data)
             except ValueError as err:
                 self.unit.status = BlockedStatus(str(err))
                 return
 
-            charm_config_env = self.create_env(parsed_secrets_data)
             # context.update({convert_env_var(key): value for key, value in charm_config_env.items()})
             context.update(charm_config_env)
 
