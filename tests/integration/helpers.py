@@ -42,6 +42,32 @@ WORKER_CONFIG = {
 }
 
 
+def get_worker_config(secret_id):
+    """Get worker charm config.
+
+    Args:
+        secret_id: Juju secret id.
+    """
+    return {
+        "host": f"{APP_NAME_SERVER}:7233",
+        "namespace": "default",
+        "queue": "test-queue",
+        "secrets": dedent(
+            f"""
+        secrets:
+            env:
+                - key1: value1
+                - key2: value2
+            juju:
+                - secret-id: {secret_id}
+                key: sensitive1
+                - secret-id: {secret_id}
+                key: sensitive2
+        """
+        ),
+    }
+
+
 def unseal_vault(client, endpoint: str, root_token: str, unseal_key: str):
     """Unseal a Vault instance if it is currently sealed.
 

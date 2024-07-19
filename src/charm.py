@@ -184,8 +184,17 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         """
         try:
             self._validate(event)
-        except ValueError:
+        except SecretNotFoundError:
+            self.unit.status = BlockedStatus("juju secrets not found yet")
             return
+        except ModelError:
+            self.unit.status = BlockedStatus("access to juju secrets not granted to charm")
+            return
+        except ValueError as err:
+            self.unit.status = BlockedStatus(str(err))
+            return
+        # except ValueError:
+        # return
 
         container = self.unit.get_container(self.name)
         valid_pebble_plan = self._validate_pebble_plan(container)
@@ -228,10 +237,10 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         """
         charm_env = {}
         if parsed_secrets_data.get("juju") and not JujuVersion.from_environ().has_secrets:
-            raise ValueError("")
+            raise ValueError("Juju version does not support Juju user secrets")
 
         if parsed_secrets_data.get("vault") and not self.model.relations["vault"]:
-            raise ValueError("")
+            raise ValueError("No vault relation found to fetch secrets from")
 
         env_variables = parsed_secrets_data.get("env")
         for key, value in env_variables.items():
@@ -240,7 +249,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         juju_variables = parsed_secrets_data.get("juju")
         for juju_secret in juju_variables:
             try:
-                # TODO (kelkawi-a): update this to either check for secret-id or secret-name
                 secret_id = juju_secret.get("secret-id")
                 secret_name = juju_secret.get("secret-name")
                 key = juju_secret.get("key")
@@ -251,9 +259,20 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 else:
                     secret = self.model.get_secret(label=secret_name)
 
-                secret_content = secret.get_content()
+                secret_content = secret.get_content(refresh=True)
                 charm_env.update({key: secret_content[key]})
-            except (SecretNotFoundError, ModelError, KeyError) as e:
+            except SecretNotFoundError:
+                raise SecretNotFoundError
+                # raise ValueError(f"Secret `{secret_id or secret_name}` not found")
+            except ModelError:
+                raise ModelError
+                # logger.error(f"SECRET ID: {secret_id}")
+                # logger.error(f"SECRET NAME: {secret_name}")
+                # logger.error(f"Secret `{secret_id or secret_name}` not found or access not granted to charm")
+                # raise ValueError(f"Access to secret `{secret_id or secret_name}` not granted to charm")
+            # except (SecretNotFoundError, ModelError, KeyError) as e:
+            except KeyError as e:
+                logger.error(f"Error parsing secrets env: {e}")
                 raise ValueError(f"Error parsing secrets env: {e}") from e
 
         if self.model.relations["vault"]:
@@ -302,8 +321,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if not self._state.is_ready():
             raise ValueError("peer relation not ready")
 
-        # self._process_env_file(event)
-
         self._check_required_config(REQUIRED_CHARM_CONFIG)
 
         if self.config["auth-provider"]:
@@ -326,38 +343,56 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             except (yaml.parser.ParserError, yaml.scanner.ScannerError) as e:
                 raise ValueError(f"Incorrectly formatted `secrets` config: {e}") from e
 
+        try:
+            secrets_config = self.config.get("secrets")
+            if secrets_config:
+                parsed_secrets_data = parse_secrets(secrets_config)
+                charm_config_env = self.create_env(parsed_secrets_data)
+                # context.update(charm_config_env)
+        except SecretNotFoundError:
+            raise SecretNotFoundError
+            # self.unit.status = WaitingStatus("juju secrets not found yet")
+            # return
+        except ModelError:
+            raise ModelError
+            # self.unit.status = WaitingStatus("access to juju secrets not granted to charm")
+            # return
+        except ValueError as err:
+            self.unit.status = BlockedStatus(str(err))
+            return
+
     def _update(self, event):  # noqa: C901
         """Update the Temporal worker configuration and replan its execution.
 
         Args:
             event: The event triggered when the relation changed.
         """
-        try:
-            self._validate(event)
-        except ValueError as err:
-            self.unit.status = BlockedStatus(str(err))
-            return
-
         container = self.unit.get_container(self.name)
         if not container.can_connect():
             event.defer()
             self.unit.status = WaitingStatus("waiting for pebble api")
             return
 
-        logger.info("Configuring Temporal worker")
-
         context = {}
         secrets_config = self.config.get("secrets")
-        if secrets_config:
-            try:
+
+        try:
+            self._validate(event)
+            if secrets_config:
                 parsed_secrets_data = parse_secrets(secrets_config)
                 charm_config_env = self.create_env(parsed_secrets_data)
-            except ValueError as err:
-                self.unit.status = BlockedStatus(str(err))
-                return
+                context.update(charm_config_env)
+        except SecretNotFoundError:
+            self.unit.status = WaitingStatus("juju secrets not found yet")
+            return
+        except ModelError:
+            self.unit.status = WaitingStatus("access to juju secrets not granted to charm")
+            return
+        except ValueError as err:
+            self.unit.status = BlockedStatus(str(err))
+            return
 
-            # context.update({convert_env_var(key): value for key, value in charm_config_env.items()})
-            context.update(charm_config_env)
+        logger.info("Configuring Temporal worker")
 
         proxy_vars = {
             "HTTP_PROXY": "JUJU_CHARM_HTTP_PROXY",
@@ -435,6 +470,7 @@ def parse_secrets(yaml_string):
         ValueError: If the YAML string does not conform to the expected structure.
     """
     data = yaml.safe_load(yaml_string)
+    logger.info(f"DATAAA: {data}")
 
     # Validate the main structure
     if not isinstance(data, dict) or "secrets" not in data:
