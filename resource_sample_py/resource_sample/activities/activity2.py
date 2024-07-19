@@ -8,9 +8,9 @@ from common.messages import ComposeGreetingInput
 from temporalio import activity
 
 vault_client = None
-if os.getenv("TWC_VAULT_ADDR"):
+if os.getenv("TWC_VAULT_ADDRESS"):
     vault_client = hvac.Client(
-        url=os.getenv("TWC_VAULT_ADDR"),
+        url=os.getenv("TWC_VAULT_ADDRESS"),
         verify=os.getenv("TWC_VAULT_CERT_PATH"),
     )
 
