@@ -44,6 +44,8 @@ async def deploy(ops_test: OpsTest, charm: str, temporal_worker_image: str):
     """Verify the app is up and running."""
     await ops_test.model.set_config({"update-status-hook-interval": "1m"})
 
+    await setup_temporal_ecosystem(ops_test)
+
     resources = {
         "temporal-worker-image": temporal_worker_image,
     }
@@ -57,8 +59,6 @@ async def deploy(ops_test: OpsTest, charm: str, temporal_worker_image: str):
 
     await ops_test.model.deploy(charm, resources=resources, config=worker_config, application_name=APP_NAME)
     await ops_test.model.grant_secret("worker-secrets", APP_NAME)
-
-    await setup_temporal_ecosystem(ops_test)
 
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
