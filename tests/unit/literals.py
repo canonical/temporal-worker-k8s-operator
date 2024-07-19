@@ -33,20 +33,20 @@ CONFIG = {
     "oidc-client-cert-url": "",
 }
 
-SECRETS_CONFIG = """
-secrets:
-  env:
-    - hello: world
-    - test: variable
-  juju:
-    - secret-id: my-secret
-      key: sensitive1
-    - secret-id: my-secret
-      key: sensitive2
-  vault:
-    - path: secrets
-      key: token
-"""
+# SECRETS_CONFIG = """
+# secrets:
+#   env:
+#     - hello: world
+#     - test: variable
+#   juju:
+#     - secret-id: my-secret
+#       key: sensitive1
+#     - secret-id: my-secret
+#       key: sensitive2
+#   vault:
+#     - path: secrets
+#       key: token
+# """
 
 VAULT_CONFIG = {
     "vault_address": "127.0.0.1:8081",

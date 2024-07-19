@@ -8,7 +8,7 @@ import logging
 
 import pytest
 from conftest import deploy  # noqa: F401, pylint: disable=W0611
-from helpers import attach_worker_invalid_env_file, run_sample_workflow, set_secrets_config, APP_NAME
+from helpers import run_sample_workflow
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)

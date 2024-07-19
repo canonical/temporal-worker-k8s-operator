@@ -9,8 +9,6 @@ import json
 from textwrap import dedent
 from unittest import TestCase, mock
 
-import yaml
-from ops.jujuversion import JujuVersion
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 from ops.testing import Harness
 
@@ -19,7 +17,6 @@ from tests.unit.literals import (
     CONFIG,
     CONTAINER_NAME,
     EXPECTED_VAULT_ENV,
-    SECRETS_CONFIG,
     VAULT_CONFIG,
     WANT_ENV,
 )
@@ -172,7 +169,9 @@ class TestCharm(TestCase):
         harness.update_config({"secrets": invalid_secrets_config_juju})
         self.assertEqual(
             harness.model.unit.status,
-            BlockedStatus("Invalid secrets structure: 'juju' should be a list of dictionaries with 'secret-id' and 'key'"),
+            BlockedStatus(
+                "Invalid secrets structure: 'juju' should be a list of dictionaries with 'secret-id' and 'key'"
+            ),
         )
 
         invalid_secrets_config_vault = dedent(
@@ -204,6 +203,7 @@ class TestCharm(TestCase):
         mock_from_environ.return_value = mock_juju_version
 
         secret_id = simulate_lifecycle(harness, CONFIG)
+        secret_id = secret_id.split(":")[-1]
         add_vault_relation(self, harness)
         self.harness.update_config({})
 
@@ -298,6 +298,9 @@ def simulate_lifecycle(harness, config):
     Args:
         harness: ops.testing.Harness object used to simulate charm lifecycle.
         config: object to update the charm's config.
+
+    Returns:
+        Juju secret ID.
     """
     # Simulate peer relation readiness.
     harness.add_relation("peer", "temporal")

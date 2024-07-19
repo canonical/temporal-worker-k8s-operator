@@ -15,7 +15,6 @@ from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.vault_k8s.v0 import vault_kv
-from dotenv import dotenv_values
 from ops import main, pebble
 from ops.charm import CharmBase
 from ops.jujuversion import JujuVersion
@@ -214,6 +213,19 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             return False
 
     def create_env(self, parsed_secrets_data):
+        """Create an environment dictionary with secrets from the parsed secrets data.
+
+        Args:
+            parsed_secrets_data (dict): The parsed secrets data, expected to have 'env', 'juju', and 'vault' sections.
+
+        Returns:
+            dict: A dictionary containing environment variables.
+
+        Raises:
+            ValueError: If the Juju version does not support secrets but 'juju' secrets are present, or
+                            if there is no 'vault' relation but 'vault' secrets are present.
+                        If there is an error parsing Juju secrets or reading Vault secrets.
+        """
         charm_env = {}
         if parsed_secrets_data.get("juju") and not JujuVersion.from_environ().has_secrets:
             raise ValueError("")
@@ -228,13 +240,14 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         juju_variables = parsed_secrets_data.get("juju")
         for secret in juju_variables:
             try:
+                # TODO (kelkawi-a): update this to either check for secret-id or secret-name
                 secret_id = secret.get("secret-id")
                 key = secret.get("key")
                 secret = self.model.get_secret(label=secret_id)
                 secret_content = secret.get_content()
                 charm_env.update({key: secret_content[key]})
             except (SecretNotFoundError, ModelError, KeyError) as e:
-                raise ValueError("Error parsing secrets env: %s", e)
+                raise ValueError(f"Error parsing secrets env: {e}") from e
 
         if self.model.relations["vault"]:
             vault_config = self.vault_relation.get_vault_config()
@@ -299,10 +312,10 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if self.config["sentry-dsn"] and (sample_rate < 0 or sample_rate > 1):
             raise ValueError("Invalid config: sentry-sample-rate must be between 0 and 1")
 
-        secrets = self.config.get("secrets")
-        if secrets:
+        secrets_config = self.config.get("secrets")
+        if secrets_config:
             try:
-                yaml.safe_load(secrets)
+                yaml.safe_load(secrets_config)
             except (yaml.parser.ParserError, yaml.scanner.ScannerError) as e:
                 raise ValueError(f"Incorrectly formatted `secrets` config: {e}") from e
 
@@ -327,10 +340,10 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         logger.info("Configuring Temporal worker")
 
         context = {}
-        secrets = self.config.get("secrets")
-        if secrets:
+        secrets_config = self.config.get("secrets")
+        if secrets_config:
             try:
-                parsed_secrets_data = parse_secrets(secrets)
+                parsed_secrets_data = parse_secrets(secrets_config)
             except ValueError as err:
                 self.unit.status = BlockedStatus(str(err))
                 return
@@ -391,23 +404,46 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
 
 def parse_secrets(yaml_string):
+    """Parse a YAML string containing secrets and validates its structure.
+
+    The YAML string should contain a 'secrets' key with nested 'env', 'juju', and 'vault' keys.
+    Each nested key should follow a specific structure:
+        - 'env': A list of single-key dictionaries.
+        - 'juju': A list of dictionaries with 'secret-id' and 'key' keys.
+        - 'vault': A list of dictionaries with 'path' and 'key' keys.
+
+    Args:
+        yaml_string (str): The YAML string to be parsed.
+
+    Returns:
+        dict: A dictionary with the parsed and validated secrets.
+              The structure of the returned dictionary is:
+              {
+                  "env": {str: str},
+                  "juju": [{"secret-id": str, "key": str}],
+                  "vault": [{"path": str, "key": str}]
+              }
+
+    Raises:
+        ValueError: If the YAML string does not conform to the expected structure.
+    """
     data = yaml.safe_load(yaml_string)
 
     # Validate the main structure
     if not isinstance(data, dict) or "secrets" not in data:
         raise ValueError("Invalid secrets structure: 'secrets' key not found")
 
-    secrets = data["secrets"]
-    if not isinstance(secrets, dict):
+    secrets_key = data["secrets"]
+    if not isinstance(secrets_key, dict):
         raise ValueError("Invalid secrets structure: 'secrets' should be a dictionary")
 
     # Validate env key
-    env = secrets.get("env", [])
+    env = secrets_key.get("env", [])
     if not isinstance(env, list) or not all(isinstance(item, dict) and len(item) == 1 for item in env):
         raise ValueError("Invalid secrets structure: 'env' should be a list of single-key dictionaries")
 
     # Validate juju key
-    juju = secrets.get("juju", [])
+    juju = secrets_key.get("juju", [])
     if not isinstance(juju, list) or not all(
         isinstance(item, dict) and "secret-id" in item and "key" in item and len(item) == 2 for item in juju
     ):
@@ -416,15 +452,15 @@ def parse_secrets(yaml_string):
         )
 
     # Validate vault key
-    vault = secrets.get("vault", [])
+    vault = secrets_key.get("vault", [])
     if not isinstance(vault, list) or not all(
         isinstance(item, dict) and "path" in item and "key" in item and len(item) == 2 for item in vault
     ):
         raise ValueError("Invalid secrets structure: 'vault' should be a list of dictionaries with 'path' and 'key'")
 
-    env = secrets.get("env", [])
-    juju = secrets.get("juju", [])
-    vault = secrets.get("vault", [])
+    env = secrets_key.get("env", [])
+    juju = secrets_key.get("juju", [])
+    vault = secrets_key.get("vault", [])
 
     parsed_data = {
         "env": {list(item.keys())[0]: list(item.values())[0] for item in env},

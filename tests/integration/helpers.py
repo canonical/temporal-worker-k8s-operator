@@ -27,7 +27,7 @@ WORKER_CONFIG = {
     "namespace": "default",
     "queue": "test-queue",
     "secrets": dedent(
-        f"""
+        """
     secrets:
         env:
             - key1: value1
@@ -38,25 +38,8 @@ WORKER_CONFIG = {
             - secret-id: worker-secrets
               key: sensitive2
     """
-    )
+    ),
 }
-
-
-def set_secrets_config(ops_test: OpsTest, secret_id):
-    secret_config = dedent(
-        f"""
-    secrets:
-        env:
-            - key1: value1
-            - key2: value2
-        juju:
-            - secret-id: worker-secrets
-              key: sensitive1
-            - secret-id: worker-secrets
-              key: sensitive2
-    """
-    )
-    ops_test.model.applications[APP_NAME].set_config({**WORKER_CONFIG, "secrets": secret_config})
 
 
 def unseal_vault(client, endpoint: str, root_token: str, unseal_key: str):
