@@ -31,7 +31,7 @@ class TestDeployment:
     async def test_vault_relation(self, ops_test: OpsTest):
         """Test Vault relation."""
         await scale(ops_test, app=APP_NAME, units=2)
-        await ops_test.model.deploy("vault-k8s", channel="1.15/edge")
+        await ops_test.model.deploy("vault-k8s", channel="1.16/edge")
 
         async with ops_test.fast_forward():
             await ops_test.model.wait_for_idle(
