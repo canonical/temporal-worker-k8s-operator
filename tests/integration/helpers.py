@@ -22,6 +22,11 @@ APP_NAME = METADATA["name"]
 APP_NAME_SERVER = "temporal-k8s"
 APP_NAME_ADMIN = "temporal-admin-k8s"
 
+WORKER_CONFIG = {
+    "namespace": "default",
+    "queue": "test-queue",
+}
+
 
 def get_worker_config(secret_id):
     """Get worker charm config.
