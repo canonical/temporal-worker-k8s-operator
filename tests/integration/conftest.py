@@ -49,6 +49,7 @@ async def deploy(ops_test: OpsTest, charm: str, temporal_worker_image: str):
     }
 
     await ops_test.model.add_secret(name="worker-secrets", data_args=["sensitive1=hello", "sensitive2=world"])
+    await ops_test.model.grant_secret("worker-secrets", APP_NAME)
 
     await ops_test.model.deploy(charm, resources=resources, config=WORKER_CONFIG, application_name=APP_NAME)
     await setup_temporal_ecosystem(ops_test)
