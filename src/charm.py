@@ -269,7 +269,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 logger.error(f"Error parsing secrets env: {e}")
                 raise ValueError(f"Error parsing secrets env: {e}") from e
 
-        if self.model.relations["vault"]:
+        vault_variables = parsed_secrets_data.get("vault")
+        if vault_variables and self.model.relations["vault"]:
             vault_config = self.vault_relation.get_vault_config()
             vault_client = VaultClient(
                 address=vault_config["vault_address"],
@@ -278,7 +279,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 role_secret_id=vault_config["vault_role_secret_id"],
                 mount_point=vault_config["vault_mount"],
             )
-            vault_variables = parsed_secrets_data.get("vault")
+            
             for item in vault_variables:
                 key = item.get("key")
                 secret = vault_client.read_secret(item.get("path"), key)
