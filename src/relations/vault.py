@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 VAULT_NONCE_SECRET_LABEL = "nonce"  # nosec
 VAULT_CERT_PATH = "/vault/cert.pem"
+VAULT_CA_CERT_FILENAME = "ca.pem"
 
 
 class VaultRelation(framework.Object):
@@ -104,6 +105,10 @@ class VaultRelation(framework.Object):
         secret_content = secret.get_content(refresh=True)
         role_id = secret_content["role-id"]
         role_secret_id = secret_content["role-secret-id"]
+
+        certs_path = self.charm.get_ca_cert_location_in_charm()
+        with open(f"{certs_path}/{VAULT_CA_CERT_FILENAME}", "w") as fd:
+            fd.write(ca_certificate)
 
         return {
             "vault_address": vault_url,

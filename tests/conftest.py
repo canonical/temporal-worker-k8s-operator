@@ -1,7 +1,7 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Fixtures for jenkins-k8s charm tests."""
+"""Fixtures for charm tests."""
 
 import pytest
 

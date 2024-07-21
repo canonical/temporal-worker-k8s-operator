@@ -148,5 +148,37 @@ options:
     type: string
 
   secrets:
-    description: placeholder
+    description: |
+      This configuration is used to manage and retrieve sensitive information required 
+      by the application from different sources. The `secrets` configuration supports 
+      the following sources:
+      
+      - **Environment Variables**: Secrets can be provided directly as environment variables.
+      - **Juju**: Secrets can be managed and retrieved using Juju's secret storage capabilities.
+      - **Vault**: Secrets can be securely stored and accessed from a HashiCorp Vault instance.
+      
+      The application will prioritize these sources in the following order: Vault, Juju, 
+      and then environment variables. If a secret is not found in the higher priority 
+      sources, it will fallback to the next available source. This ensures that the 
+      application can function correctly in various deployment scenarios while maintaining 
+      security and flexibility.
+
+      Sample structure:
+    
+        ```yaml
+          secrets:
+            env:
+              - key1: value1
+              - key2: value2
+            juju:
+              - secret-id: <secret_id>
+                key: sensitive1
+              - secret-id: <secret_id>
+                key: sensitive2
+            vault:
+              - path: my-secrets
+                key: key1
+              - path: my-secrets
+                key: key2
+        ```
     type: string

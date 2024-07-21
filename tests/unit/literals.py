@@ -33,21 +33,6 @@ CONFIG = {
     "oidc-client-cert-url": "",
 }
 
-# SECRETS_CONFIG = """
-# secrets:
-#   env:
-#     - hello: world
-#     - test: variable
-#   juju:
-#     - secret-id: my-secret
-#       key: sensitive1
-#     - secret-id: my-secret
-#       key: sensitive2
-#   vault:
-#     - path: secrets
-#       key: token
-# """
-
 VAULT_CONFIG = {
     "vault_address": "127.0.0.1:8081",
     "vault_ca_certificate_bytes": "abcd",
@@ -55,15 +40,6 @@ VAULT_CONFIG = {
     "vault_role_id": "111",
     "vault_role_secret_id": "222",
     "vault_cert_path": "/vault/cert.pem",
-}
-
-EXPECTED_VAULT_ENV = {
-    "TWC_VAULT_ADDRESS": "127.0.0.1:8081",
-    "TWC_VAULT_CA_CERTIFICATE_BYTES": "abcd",
-    "TWC_VAULT_MOUNT": "temporal-worker-k8s",
-    "TWC_VAULT_ROLE_ID": "111",
-    "TWC_VAULT_ROLE_SECRET_ID": "222",
-    "TWC_VAULT_CERT_PATH": "/vault/cert.pem",
 }
 
 WANT_ENV = {

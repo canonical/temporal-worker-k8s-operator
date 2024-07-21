@@ -22,10 +22,24 @@ APP_NAME = METADATA["name"]
 APP_NAME_SERVER = "temporal-k8s"
 APP_NAME_ADMIN = "temporal-admin-k8s"
 
-WORKER_CONFIG = {
+BASE_WORKER_CONFIG = {
     "namespace": "default",
     "queue": "test-queue",
 }
+
+SECRETS_WITH_VAULT_CONFIG = dedent(
+    """
+        secrets:
+            env:
+                - key1: value1
+                - key2: value2
+            vault:
+                - path: vault-secrets1
+                  key: vault-secret1
+                - path: vault-secrets2
+                  key: vault-secret2
+        """
+)
 
 
 def get_worker_config(secret_id):
@@ -38,22 +52,38 @@ def get_worker_config(secret_id):
         Temporal worker charm config
     """
     return {
-        "namespace": "default",
-        "queue": "test-queue",
+        **BASE_WORKER_CONFIG,
         "secrets": dedent(
             f"""
         secrets:
             env:
-                - key1: value1
+                - message: hello
                 - key2: value2
             juju:
                 - secret-id: {secret_id}
-                  key: sensitive1
+                  key: juju-secret1
                 - secret-id: {secret_id}
-                  key: sensitive2
+                  key: juju-secret2
         """
         ),
     }
+
+
+async def add_juju_secret(ops_test: OpsTest):
+    """Add Juju user secret to model.
+
+    Args:
+        ops_test: PyTest object.
+
+    Returns:
+        secret ID of created secret.
+    """
+    juju_secret = await ops_test.model.add_secret(
+        name="worker-secrets", data_args=["juju-secret1=world", "juju-secret2=value2"]
+    )
+
+    secret_id = juju_secret.split(":")[-1]
+    return secret_id
 
 
 def unseal_vault(client, endpoint: str, root_token: str, unseal_key: str):
@@ -82,7 +112,7 @@ async def run_sample_workflow(ops_test: OpsTest, workflow_type=None):
     logger.info("running workflow on app address: %s", url)
 
     client = await Client.connect(
-        Options(host=url, queue=get_worker_config(None)["queue"], namespace=get_worker_config(None)["namespace"])
+        Options(host=url, queue=BASE_WORKER_CONFIG["queue"], namespace=BASE_WORKER_CONFIG["namespace"])
     )
 
     workflow_name = "GreetingWorkflow"
@@ -90,18 +120,15 @@ async def run_sample_workflow(ops_test: OpsTest, workflow_type=None):
         workflow_name = "VaultWorkflow"
 
     # Execute workflow
-    name = "Jean-luc"
     result = await client.execute_workflow(
         workflow_name,
-        name,
+        "placeholder",
         id="my-workflow-id",
-        task_queue=get_worker_config(None)["queue"],
+        task_queue=BASE_WORKER_CONFIG["queue"],
         run_timeout=timedelta(seconds=20),
     )
     logger.info(f"result: {result}")
     assert result == "hello world"
-
-    # assert result == f"Hello, {name}!"
 
 
 async def create_default_namespace(ops_test: OpsTest):
@@ -226,36 +253,18 @@ async def setup_temporal_ecosystem(ops_test: OpsTest):
         assert ops_test.model.applications[APP_NAME_SERVER].units[0].workload_status == "active"
 
 
-async def attach_worker_invalid_env_file(ops_test: OpsTest):
-    """Scale the application to the provided number and wait for idle.
+async def read_unit_statuses(ops_test: OpsTest, application: str):
+    """Read the complete status from application units.
 
-    Args:
-        ops_test: PyTest object.
-    """
-    rsc_name = "env-file"
-    rsc_path = "./sample_files/invalid.env"
-
-    logger.info(f"Attaching resource: {APP_NAME} {rsc_name}={rsc_path}")
-    with open(rsc_path, "rb") as file:
-        ops_test.model.applications[APP_NAME].attach_resource(rsc_name, rsc_path, file)
-
-    await ops_test.model.wait_for_idle(
-        apps=[APP_NAME], status="blocked", raise_on_error=False, raise_on_blocked=False, timeout=600
-    )
-    assert ops_test.model.applications[APP_NAME].units[0].workload_status == "blocked"
-
-
-async def read_vault_unit_statuses(ops_test: OpsTest):
-    """Read the complete status from vault units.
-
-    Reads the statuses that juju emits that aren't captured by ops_test together. Captures a vault
+    Reads the statuses that juju emits that aren't captured by ops_test together. Captures a application
     units: name, status (active, blocked etc.), agent (idle, executing), address and message.
 
     Args:
         ops_test: Ops test Framework
+        application: name of application to read status of
 
     Returns:
-        The status of vault units
+        The status of application units
 
     Raises:
         Exception: if `juju status` does not return the expected format
@@ -265,7 +274,7 @@ async def read_vault_unit_statuses(ops_test: OpsTest):
         raise Exception
     output = []
     for row in status_tuple[1].split("\n"):
-        if not row.startswith("vault-k8s/"):
+        if not row.startswith(f"{application}/"):
             continue
         cells = row.split(maxsplit=4)
         if len(cells) < 5:
@@ -282,18 +291,19 @@ async def read_vault_unit_statuses(ops_test: OpsTest):
     return output
 
 
-async def wait_for_vault_status_message(
-    ops_test: OpsTest, count: int, expected_message: str, timeout: int = 100, cadence: int = 2
+async def wait_for_status_message(
+    ops_test: OpsTest, application: str, count: int, expected_message: str, timeout: int = 100, cadence: int = 2
 ):
-    """Wait for the correct vault status messages to appear.
+    """Wait for the correct application status messages to appear.
 
     This function is necessary because ops_test doesn't provide the facilities to discriminate
     depending on the status message of the units, just the statuses themselves.
 
     Args:
         ops_test: Ops test Framework.
+        application: Name of application to wait for status of
         count: How many units that are expected to be emitting the expected message
-        expected_message: The message that vault units should be setting as a status message
+        expected_message: The message that application units should be setting as a status message
         timeout: Wait time in seconds to get proxied endpoints.
         cadence: How long to wait before running the command again
 
@@ -301,9 +311,9 @@ async def wait_for_vault_status_message(
         TimeoutError: If the expected amount of statuses weren't found in the given timeout.
     """
     while timeout > 0:
-        vault_status = await read_vault_unit_statuses(ops_test)
+        application_status = await read_unit_statuses(ops_test, application)
         seen = 0
-        for row in vault_status:
+        for row in application_status:
             if row.get("message") == expected_message:
                 seen += 1
 
@@ -311,7 +321,7 @@ async def wait_for_vault_status_message(
             return
         time.sleep(cadence)
         timeout -= cadence
-    raise TimeoutError("Vault didn't show the expected status")
+    raise TimeoutError(f"Application {application} didn't show the expected status")
 
 
 async def authorize_charm(ops_test: OpsTest, root_token: str):

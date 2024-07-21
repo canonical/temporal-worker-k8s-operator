@@ -13,13 +13,7 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 from ops.testing import Harness
 
 from charm import TemporalWorkerK8SOperatorCharm
-from tests.unit.literals import (
-    CONFIG,
-    CONTAINER_NAME,
-    EXPECTED_VAULT_ENV,
-    VAULT_CONFIG,
-    WANT_ENV,
-)
+from tests.unit.literals import CONFIG, CONTAINER_NAME, VAULT_CONFIG, WANT_ENV
 
 
 class TestCharm(TestCase):
@@ -89,7 +83,9 @@ class TestCharm(TestCase):
             ActiveStatus(f"worker listening to namespace {CONFIG['namespace']!r} on queue {CONFIG['queue']!r}"),
         )
 
-    def test_vault_relation(self):
+    @mock.patch("os.makedirs")
+    @mock.patch("builtins.open", new_callable=mock.mock_open)
+    def test_vault_relation(self, mock_open, mock_makedirs):
         """The charm is ready with vault relation."""
         harness = self.harness
 
@@ -107,7 +103,7 @@ class TestCharm(TestCase):
                     "command": "./app/scripts/start-worker.sh",
                     "startup": "enabled",
                     "override": "replace",
-                    "environment": {**WANT_ENV, **EXPECTED_VAULT_ENV},
+                    "environment": WANT_ENV,
                 }
             },
         }
@@ -127,7 +123,7 @@ class TestCharm(TestCase):
                     "command": "./app/scripts/start-worker.sh",
                     "startup": "enabled",
                     "override": "replace",
-                    "environment": {**WANT_ENV},
+                    "environment": WANT_ENV,
                 }
             },
         }
@@ -170,7 +166,7 @@ class TestCharm(TestCase):
         self.assertEqual(
             harness.model.unit.status,
             BlockedStatus(
-                "Invalid secrets structure: 'juju' should be a list of dictionaries with 'key' and either 'secret-id' or 'secret-name'"
+                "Invalid secrets structure: 'juju' should be a list of dictionaries with 'key' and 'secret-id'"
             ),
         )
 
@@ -193,7 +189,11 @@ class TestCharm(TestCase):
     @mock.patch("relations.vault.VaultRelation.get_vault_config", return_value=VAULT_CONFIG)
     @mock.patch("vault_client.VaultClient._authenticate", return_value=None)
     @mock.patch("vault_client.VaultClient.read_secret", return_value="token_secret")
-    def test_valid_secrets_config(self, get_vault_config, _authenticate, read_secret, mock_from_environ):
+    @mock.patch("os.makedirs")
+    @mock.patch("builtins.open", new_callable=mock.mock_open)
+    def test_valid_secrets_config(
+        self, get_vault_config, _authenticate, read_secret, mock_from_environ, mock_open, mock_makedirs
+    ):
         """The charm parses the secret config correctly."""
         harness = self.harness
 
@@ -234,7 +234,6 @@ class TestCharm(TestCase):
                     "override": "replace",
                     "environment": {
                         **WANT_ENV,
-                        **EXPECTED_VAULT_ENV,
                         # User added secrets through config
                         **{
                             "hello": "world",

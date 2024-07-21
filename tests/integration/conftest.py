@@ -11,6 +11,7 @@ import pytest_asyncio
 from helpers import (
     APP_NAME,
     APP_NAME_SERVER,
+    add_juju_secret,
     get_worker_config,
     setup_temporal_ecosystem,
 )
@@ -53,11 +54,7 @@ async def deploy(ops_test: OpsTest, charm: str, temporal_worker_image: str):
         "temporal-worker-image": temporal_worker_image,
     }
 
-    juju_secret = await ops_test.model.add_secret(
-        name="worker-secrets", data_args=["sensitive1=hello", "sensitive2=world"]
-    )
-
-    secret_id = juju_secret.split(":")[-1]
+    secret_id = await add_juju_secret(ops_test)
     worker_config = get_worker_config(secret_id)
 
     await ops_test.model.deploy(charm, resources=resources, config=worker_config, application_name=APP_NAME)

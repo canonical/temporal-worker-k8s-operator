@@ -5,7 +5,7 @@ restart:
   description: Restart the Temporal worker.
 
 add-vault-secret:
-  description: Creates a secret in Vault
+  description: Creates a secret in Vault.
   params:
     path:
       description: The path to create the secret in.
@@ -17,3 +17,14 @@ add-vault-secret:
       description: The value to create.
       type: string
   required: [path, key, value]
+
+get-vault-secret:
+  description: Reads a secret from Vault.
+  params:
+    path:
+      description: The path to create the secret in.
+      type: string
+    key:
+      description: The key to create.
+      type: string
+  required: [path, key]
