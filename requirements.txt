@@ -1,4 +1,4 @@
-ops==2.14.0
+ops==2.15.0
 cosl==0.0.6
 python-dotenv==1.0.0
 pytest-interface-tester==2.0.1
