@@ -66,6 +66,17 @@ class VaultRelation(framework.Object):
         """
         self.charm._update(event)
 
+    def update_vault_relation(self):
+        """Update Vault relation binding."""
+        binding = self.charm.model.get_binding("vault")
+        if binding is not None:
+            try:
+                egress_subnet = str(binding.network.interfaces[0].subnet)
+                relation = self.charm.model.get_relation("vault")
+                self.charm.vault.request_credentials(relation, egress_subnet, self.get_vault_nonce())
+            except Exception as e:
+                logger.warning(f"failed to update vault relation - {repr(e)}")
+
     def get_vault_nonce(self):
         """Retrieve the Vault nonce.
 

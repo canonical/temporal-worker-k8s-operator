@@ -189,24 +189,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         charm_env = {**env_variables, **juju_variables, **vault_variables}
         return charm_env
 
-    # def _get_vault_client(self, vault_config):
-    #     """Initialize Vault client.
-
-    #     Args:
-    #         vault_config: Vault connection parameters.
-
-    #     Returns:
-    #         Vault client.
-    #     """
-    #     ca_certificate_path = self.vault_relation.get_ca_cert_location_in_charm()
-    #     return VaultClient(
-    #         address=vault_config["vault_address"],
-    #         cert_path=f"{ca_certificate_path}/{VAULT_CA_CERT_FILENAME}",
-    #         role_id=vault_config["vault_role_id"],
-    #         role_secret_id=vault_config["vault_role_secret_id"],
-    #         mount_point=vault_config["vault_mount"],
-    #     )
-
     def _check_required_config(self, config_list):
         """Check if required config has been set by user.
 
@@ -264,14 +246,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         Args:
             event: The event triggered when the relation changed.
         """
-        # update vault relation if exists
-        binding = self.model.get_binding("vault")
-        if binding is not None:
-            try:
-                egress_subnet = str(binding.network.interfaces[0].subnet)
-                self.vault.request_credentials(event.relation, egress_subnet, self.vault_relation.get_vault_nonce())
-            except Exception as e:
-                logger.warning(f"failed to update vault relation - {repr(e)}")
+        self.vault_relation.update_vault_relation()
 
         container = self.unit.get_container(self.name)
         if not container.can_connect():

@@ -47,11 +47,13 @@ class VaultActions(framework.Object):
             event.fail("`path`, `key` and `value` are required parameters")
 
         try:
-            try:
-                vault_client = self.charm.vault_relation.get_vault_client()
-            except Exception:
-                event.fail("unable to initialize vault client. remove relation and retry.")
+            vault_client = self.charm.vault_relation.get_vault_client()
+        except Exception:
+            event.fail("unable to initialize vault client. remove relation and retry.")
+
+        try:
             vault_client.write_secret(path=path, key=key, value=value)
+            self.charm._update(event)
         except ValueError as e:
             logger.error("unable to create secret in vault: %s", str(e))
             event.fail(str(e))
