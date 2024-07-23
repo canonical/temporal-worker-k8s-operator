@@ -66,11 +66,14 @@ deployment, follow the following steps:
     charmcraft pack
 
     # Build ROCK file and push it to local registry:
-    cd resource_sample_py && make build_rock
+    make -C resource_sample_py build_rock
 
     # Deploy the charm:
     juju deploy ./temporal-worker-k8s_ubuntu-22.04-amd64.charm --resource temporal-worker-image=localhost:32000/temporal-worker-rock
     juju config temporal-worker-k8s --file=path/to/config.yaml
+
+    # Refresh the charm after updating
+    juju refresh --path="./temporal-worker-k8s_ubuntu-22.04-amd64.charm" temporal-worker-k8s --force-units --resource temporal-worker-image=localhost:32000/temporal-worker-rock
 
     # Check progress:
     juju status --relations --watch 2s

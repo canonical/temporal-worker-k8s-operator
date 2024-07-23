@@ -20,19 +20,19 @@ connect to a deployed Temporal server.
 
 ### Deploying
 
-To deploy the Temporal Worker operator, you can start by creating a Temporal
-workflow, or use the one provided in
+To deploy the Temporal Worker operator charm, you can start by creating a
+Temporal workflow, or use the one provided in
 [`resource_sample_py`](./resource_sample_py/). Once done, the project can be
 built as a [ROCK](https://documentation.ubuntu.com/rockcraft/en/stable/) and
 pushed to the [local registry](https://microk8s.io/docs/registry-built-in) by
 running the following command inside the `resource_sample_py` directory:
 
 ```bash
-make build_rock
+make -C resource_sample_py build_rock
 ```
 
-The Temporal Worker operator can then be deployed and connected to a deployed
-Temporal server using the Juju command line as follows:
+The Temporal Worker operator charm can then be deployed and connected to a
+deployed Temporal server using the Juju command line as follows:
 
 ```bash
 juju deploy temporal-worker-k8s --resource temporal-worker-image=localhost:32000/temporal-worker-rock
@@ -60,20 +60,93 @@ Note: The only requirement for the ROCK is to have a `scripts/start-worker.sh`
 file, which will be used as the entry point for the charm to start the workload
 container.
 
-### Adding Environment Variables
+### Adding Secrets & Environment Variables
 
-The Temporal Worker operator can be used to inject environment variables that
-can be ingested by your workflows. This can be done using the Juju command line
-as follows:
+The Temporal Worker operator charm allows the user to configure multiple sources
+of environment variables and secrets to be injected into the workload container
+and consumed by the user's workflow definitions. These sources can be configured
+through the `secrets` config parameter of the charm. Below are the three sources
+of environment variables and secrets currently supported. A user may choose to
+use one, all or none of them. Once the `secrets.yaml` file is ready, it can be
+configured into the charm as follows:
 
 ```bash
-juju attach-resource temporal-worker-k8s env-file=path/to/.env
+juju config temporal-worker-k8s secrets=@/path/to/secrets.yaml
 ```
 
-#### **`.env`**
+These secrets can then be injested by the workflows by using the `os` package as
+follows:
 
+```python
+import os
+value1 = os.getenv("key1")
 ```
-VALUE=123
+
+#### Direct Environment Variables
+
+These are usually values that are not secret and can be stored as plaintext. An
+example is setting the application environment to `staging` or `production`.
+They can be set as follows:
+
+##### **`secrets.yaml`**
+
+```yaml
+secrets:
+  env:
+    - key1: value1
+    - key2: value2
+```
+
+#### Juju User Secrets (Requires Juju 3.3+)
+
+[Juju secrets](https://juju.is/docs/juju/manage-secrets) are values which can be
+stored in the model and accessed by the charm. To do so, you must first add the
+secret and grant the charm access to it:
+
+```bash
+juju add-secret my-secret key1=value1 key2=value2
+
+# Output: secret:<secret_id>
+
+juju grant-secret my-secret temporal-worker-k8s
+```
+
+The secrets can then be configured into the charm as follows:
+
+##### **`secrets.yaml`**
+
+```yaml
+secrets:
+  juju:
+    - secret-id: <secret_id>
+      key: key1
+    - secret-id: <secret_id>
+      key: key2
+```
+
+#### Vault
+
+The Vault section below outlines how the Temporal Worker operator charm can be
+related to the Vault operator charm for storing secrets securely. Once done, the
+charm can be configured to fetch secrets from Vault and inject them as variables
+into the workload container. The secrets can be configured into the charm as
+follows:
+
+##### **`secrets.yaml`**
+
+```yaml
+secrets:
+  vault:
+    - path: my-secrets
+      key: key1
+    - path: my-secrets
+      key: key2
+```
+
+These secrets can then be added to Vault by running the following charm action:
+
+```bash
+juju run temporal-worker-k8s/leader add-vault-secret path="my-secrets" key="key1" value="value1"
 ```
 
 ## Verifying
@@ -112,9 +185,9 @@ juju scale-application temporal-worker-k8s <num_of_replicas_required_replicas>
 
 ## Error Monitoring
 
-The Temporal Worker operator has a built-in Sentry interceptor which can be used
-to intercept and capture errors from the Temporal SDK. To enable it, run the
-following commands:
+The Temporal Worker operator charm has a built-in Sentry interceptor which can
+be used to intercept and capture errors from the Temporal SDK. To enable it, run
+the following commands:
 
 ```bash
 juju config temporal-worker-k8s sentry-dsn=<YOUR_SENTRY_DSN>
@@ -163,7 +236,7 @@ storing workflow-related credentials in production environments. To enable this,
 run the following commands:
 
 ```bash
-juju deploy vault-k8s --channel 1.15/edge
+juju deploy vault-k8s --channel 1.16/edge
 
 # After following Vault doc instructions to unseal Vault
 juju relate temporal-worker-k8s vault-k8s
