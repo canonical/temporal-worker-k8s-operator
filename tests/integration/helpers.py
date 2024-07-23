@@ -86,6 +86,32 @@ async def add_juju_secret(ops_test: OpsTest):
     return secret_id
 
 
+async def add_vault_secret(ops_test: OpsTest, path: str, key: str, value: str):
+    """Add Vault secret using charm action.
+
+    Args:
+        ops_test: PyTest object.
+        path: Path to write to.
+        key: Key to write secret to.
+        value: Secret value to write.
+    """
+    secret_added = False
+    for i in range(10):
+        action = (
+            await ops_test.model.applications[APP_NAME]
+            .units[0]
+            .run_action("add-vault-secret", path=path, key=key, value=value)
+        )
+        result = (await action.wait()).results
+        logger.info("add vault secret result: %s", result)
+        if "result" in result and result["result"] == "secret successfully created":
+            secret_added = True
+            break
+        time.sleep(2)
+
+    assert secret_added
+
+
 def unseal_vault(client, endpoint: str, root_token: str, unseal_key: str):
     """Unseal a Vault instance if it is currently sealed.
 

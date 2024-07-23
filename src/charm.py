@@ -9,8 +9,6 @@
 import logging
 import os
 import secrets
-from pathlib import Path
-from typing import Optional
 
 import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
@@ -19,16 +17,9 @@ from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.vault_k8s.v0 import vault_kv
 from ops import main, pebble
 from ops.charm import CharmBase
-from ops.jujuversion import JujuVersion
-from ops.model import (
-    ActiveStatus,
-    BlockedStatus,
-    MaintenanceStatus,
-    ModelError,
-    SecretNotFoundError,
-    WaitingStatus,
-)
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 
+import secret_processors
 from literals import (
     LOG_FILE,
     PROMETHEUS_PORT,
@@ -39,13 +30,9 @@ from literals import (
     VALID_LOG_LEVELS,
 )
 from log import log_event_handler
-from relations.vault import (
-    VAULT_CA_CERT_FILENAME,
-    VAULT_NONCE_SECRET_LABEL,
-    VaultRelation,
-)
+from relations.vault import VAULT_NONCE_SECRET_LABEL, VaultRelation
 from state import State
-from vault_client import VaultClient
+from vault.actions import VaultActions
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +55,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self.framework.observe(self.on.restart_action, self._on_restart)
         self.framework.observe(self.on.update_status, self._on_update_status)
         self.framework.observe(self.on.install, self._on_install)
-        self.framework.observe(self.on.add_vault_secret_action, self._on_add_vault_secret)
-        self.framework.observe(self.on.get_vault_secret_action, self._on_get_vault_secret)
 
         # Vault
         self.vault = vault_kv.VaultKvRequires(
@@ -78,6 +63,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             mount_suffix=self.app.name,
         )
         self.vault_relation = VaultRelation(self)
+        self.vault_actions = VaultActions(self)
 
         # Prometheus
         self._prometheus_scraping = MetricsEndpointProvider(
@@ -137,70 +123,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         event.set_results({"result": "worker successfully restarted"})
 
     @log_event_handler(logger)
-    def _on_add_vault_secret(self, event):
-        """Add Vault secret action handler.
-
-        Args:
-            event:The event triggered by the restart action
-        """
-        container = self.unit.get_container(self.name)
-        if not container.can_connect():
-            event.fail("Failed to connect to the container")
-            return
-
-        vault_config = self.vault_relation.get_vault_config()
-        if not vault_config:
-            event.fail("No vault relation found")
-
-        path, key, value = (event.params.get(param) for param in ["path", "key", "value"])
-        if not all([path, key, value]):
-            event.fail("`path`, `key` and `value` are required parameters")
-
-        try:
-            try:
-                vault_client = self._get_vault_client(vault_config)
-            except Exception:
-                event.fail("unable to initialize vault client. remove relation and retry.")
-            vault_client.write_secret(path=path, key=key, value=value)
-        except Exception as e:
-            event.fail(str(e))
-            return
-
-        event.set_results({"result": "secret successfully created"})
-
-    @log_event_handler(logger)
-    def _on_get_vault_secret(self, event):
-        """Get Vault secret action handler.
-
-        Args:
-            event:The event triggered by the restart action
-        """
-        container = self.unit.get_container(self.name)
-        if not container.can_connect():
-            event.fail("Failed to connect to the container")
-            return
-
-        vault_config = self.vault_relation.get_vault_config()
-        if not vault_config:
-            event.fail("No vault relation found")
-
-        path, key = (event.params.get(param) for param in ["path", "key"])
-        if not all([path, key]):
-            event.fail("`path` and `key` are required parameters")
-
-        try:
-            try:
-                vault_client = self._get_vault_client(vault_config)
-            except Exception:
-                event.fail("unable to initialize vault client. remove relation and retry.")
-            value = vault_client.read_secret(path=path, key=key)
-        except Exception as e:
-            event.fail(str(e))
-            return
-
-        event.set_results({"result": value})
-
-    @log_event_handler(logger)
     def _on_config_changed(self, event):
         """Handle configuration changes.
 
@@ -251,105 +173,39 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         except pebble.ConnectionError:
             return False
 
-    def get_ca_cert_location_in_charm(self) -> Optional[Path]:
-        """Return the CA certificate location in the charm (not in the workload).
-
-        This path would typically be: /var/lib/juju/storage/certs/0/ca.pem
-
-        Returns:
-            Path: The CA certificate location
-        """
-        storage = self.model.storages
-        if "certs" not in storage:
-            return None
-        if len(storage["certs"]) == 0:
-            return None
-        cert_storage = storage["certs"][0]
-        return cert_storage.location
-
-    def create_env(self):  # noqa: C901
+    def create_env(self):
         """Create an environment dictionary with secrets from the parsed secrets data.
 
         Returns:
             dict: A dictionary containing environment variables.
-
-        Raises:
-            ValueError: If the Juju version does not support secrets but 'juju' secrets are present, or
-                            if there is no 'vault' relation but 'vault' secrets are present.
-                        If there is an error parsing Juju secrets or reading Vault secrets.
-                        If a specified Juju secret is not found.
-                        If charm does not have permission to access specified Juju secret.
         """
         secrets_config = self.config.get("secrets")
-        parsed_secrets_data = parse_secrets(secrets_config)
-        charm_env = {}
-        if parsed_secrets_data.get("juju") and not JujuVersion.from_environ().has_secrets:
-            raise ValueError("Juju version does not support Juju user secrets")
+        parsed_secrets_data = secret_processors.parse_secrets(secrets_config)
 
-        if parsed_secrets_data.get("vault") and not self.model.relations["vault"]:
-            raise ValueError("No vault relation found to fetch secrets from")
+        env_variables = secret_processors.process_env_variables(parsed_secrets_data)
+        juju_variables = secret_processors.process_juju_secrets(self, parsed_secrets_data)
+        vault_variables = secret_processors.process_vault_secrets(self, parsed_secrets_data)
 
-        # Process environments from config
-        env_variables = parsed_secrets_data.get("env")
-        for key, value in env_variables.items():
-            charm_env.update({key: value})
-
-        # Process variables from Juju secret
-        juju_variables = parsed_secrets_data.get("juju")
-        for juju_secret in juju_variables:
-            try:
-                secret_id = juju_secret.get("secret-id")
-                key = juju_secret.get("key")
-                secret = self.model.get_secret(id=secret_id)
-
-                secret_content = secret.get_content(refresh=True)
-                charm_env.update({key: secret_content[key]})
-            except SecretNotFoundError as e:
-                raise ValueError(f"Juju secret `{secret_id}` not found") from e
-            except ModelError as e:
-                raise ValueError(f"Access permission not granted to charm for secret `{secret_id}`") from e
-            except KeyError as e:
-                logger.error(f"Error parsing secrets env: {e}")
-                raise ValueError(f"Error parsing secrets env: {e}") from e
-
-        # Process variables from Vault
-        vault_variables = parsed_secrets_data.get("vault")
-        if vault_variables and self.model.relations["vault"]:
-            vault_config = self.vault_relation.get_vault_config()
-            try:
-                vault_client = self._get_vault_client(vault_config)
-            except Exception as e:
-                logger.error("unable to initinitialize vault client: %s", e)
-                raise ValueError("unable to initialize vault client. remove relation and retry.") from e
-
-            for item in vault_variables:
-                key = item.get("key")
-                path = item.get("path")
-                try:
-                    secret = vault_client.read_secret(path=path, key=key)
-                except Exception as e:
-                    raise ValueError(f"Unable to read vault secret `{key}` at path `{path}`: {e}") from e
-                charm_env.update({key: secret})
-
+        charm_env = {**env_variables, **juju_variables, **vault_variables}
         return charm_env
 
-    def _get_vault_client(self, vault_config):
-        """Initialize Vault client.
+    # def _get_vault_client(self, vault_config):
+    #     """Initialize Vault client.
 
-        Args:
-            vault_config: Vault connection parameters.
+    #     Args:
+    #         vault_config: Vault connection parameters.
 
-        Returns:
-            Vault client.
-        """
-        ca_certificate_path = self.get_ca_cert_location_in_charm()
-        return VaultClient(
-            address=vault_config["vault_address"],
-            cert_path=f"{ca_certificate_path}/{VAULT_CA_CERT_FILENAME}",
-            role_id=vault_config["vault_role_id"],
-            role_secret_id=vault_config["vault_role_secret_id"],
-            mount_point=vault_config["vault_mount"],
-        )
+    #     Returns:
+    #         Vault client.
+    #     """
+    #     ca_certificate_path = self.vault_relation.get_ca_cert_location_in_charm()
+    #     return VaultClient(
+    #         address=vault_config["vault_address"],
+    #         cert_path=f"{ca_certificate_path}/{VAULT_CA_CERT_FILENAME}",
+    #         role_id=vault_config["vault_role_id"],
+    #         role_secret_id=vault_config["vault_role_secret_id"],
+    #         mount_point=vault_config["vault_mount"],
+    #     )
 
     def _check_required_config(self, config_list):
         """Check if required config has been set by user.
@@ -467,74 +323,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         container.replan()
 
         self.unit.status = MaintenanceStatus("replanning application")
-
-
-def parse_secrets(yaml_string):
-    """Parse a YAML string containing secrets and validates its structure.
-
-    The YAML string should contain a 'secrets' key with nested 'env', 'juju', and 'vault' keys.
-    Each nested key should follow a specific structure:
-        - 'env': A list of single-key dictionaries.
-        - 'juju': A list of dictionaries with 'secret-id' and 'key' keys.
-        - 'vault': A list of dictionaries with 'path' and 'key' keys.
-
-    Args:
-        yaml_string (str): The YAML string to be parsed.
-
-    Returns:
-        dict: A dictionary with the parsed and validated secrets.
-              The structure of the returned dictionary is:
-              {
-                  "env": {str: str},
-                  "juju": [{"secret-id": str, "key": str}],
-                  "vault": [{"path": str, "key": str}]
-              }
-
-    Raises:
-        ValueError: If the YAML string does not conform to the expected structure.
-    """
-    data = yaml.safe_load(yaml_string)
-
-    # Validate the main structure
-    if not isinstance(data, dict) or "secrets" not in data:
-        raise ValueError("Invalid secrets structure: 'secrets' key not found")
-
-    secrets_key = data["secrets"]
-    if not isinstance(secrets_key, dict):
-        raise ValueError("Invalid secrets structure: 'secrets' should be a dictionary")
-
-    # Validate env key
-    env = secrets_key.get("env", [])
-    if not isinstance(env, list) or not all(isinstance(item, dict) and len(item) == 1 for item in env):
-        raise ValueError("Invalid secrets structure: 'env' should be a list of single-key dictionaries")
-
-    # Validate juju key
-    juju = secrets_key.get("juju", [])
-    if not isinstance(juju, list) or not all(
-        isinstance(item, dict) and "key" in item and (("secret-id" in item) and len(item) == 2) for item in juju
-    ):
-        raise ValueError(
-            "Invalid secrets structure: 'juju' should be a list of dictionaries with 'key' and 'secret-id'"
-        )
-
-    # Validate vault key
-    vault = secrets_key.get("vault", [])
-    if not isinstance(vault, list) or not all(
-        isinstance(item, dict) and "path" in item and "key" in item and len(item) == 2 for item in vault
-    ):
-        raise ValueError("Invalid secrets structure: 'vault' should be a list of dictionaries with 'path' and 'key'")
-
-    env = secrets_key.get("env", [])
-    juju = secrets_key.get("juju", [])
-    vault = secrets_key.get("vault", [])
-
-    parsed_data = {
-        "env": {list(item.keys())[0]: list(item.values())[0] for item in env},
-        "juju": [{"secret-id": item.get("secret-id"), "key": item.get("key")} for item in juju],
-        "vault": [{"path": item.get("path"), "key": item.get("key")} for item in vault],
-    }
-
-    return parsed_data
 
 
 def convert_env_var(config_var, prefix="TWC_"):

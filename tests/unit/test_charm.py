@@ -187,15 +187,19 @@ class TestCharm(TestCase):
 
     @mock.patch("ops.jujuversion.JujuVersion.from_environ")
     @mock.patch("relations.vault.VaultRelation.get_vault_config", return_value=VAULT_CONFIG)
-    @mock.patch("vault_client.VaultClient._authenticate", return_value=None)
-    @mock.patch("vault_client.VaultClient.read_secret", return_value="token_secret")
+    @mock.patch("relations.vault.VaultRelation.get_vault_client")
     @mock.patch("os.makedirs")
     @mock.patch("builtins.open", new_callable=mock.mock_open)
     def test_valid_secrets_config(
-        self, get_vault_config, _authenticate, read_secret, mock_from_environ, mock_open, mock_makedirs
+        self, mock_open, mock_makedirs, get_vault_client, get_vault_config, mock_from_environ
     ):
         """The charm parses the secret config correctly."""
         harness = self.harness
+
+        # Mock Vault client
+        mock_vault_client = mock.Mock()
+        mock_vault_client.read_secret.return_value = "token_secret"
+        get_vault_client.return_value = mock_vault_client
 
         # Mock JujuVersion.from_environ().has_secrets
         mock_juju_version = mock.Mock()

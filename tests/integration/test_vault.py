@@ -5,7 +5,6 @@
 """Temporal worker charm vault relation integration tests."""
 
 import logging
-import time
 
 import hvac
 import pytest
@@ -13,6 +12,7 @@ from conftest import deploy  # noqa: F401, pylint: disable=W0611
 from helpers import (
     APP_NAME,
     SECRETS_WITH_VAULT_CONFIG,
+    add_vault_secret,
     authorize_charm,
     get_unit_url,
     run_sample_workflow,
@@ -76,30 +76,8 @@ class TestDeployment:
             )
 
             logger.info("adding sample secrets to vault")
-            for i in range(10):
-                action = (
-                    await ops_test.model.applications[APP_NAME]
-                    .units[0]
-                    .run_action("add-vault-secret", path="vault-secrets", key="vault-secret1", value="hello")
-                )
-                result = (await action.wait()).results
-                logger.info("action1 result: %s", result)
-                if "result" in result and result["result"] == "secret successfully created":
-                    break
-                time.sleep(2)
-
-            for i in range(10):
-                action = (
-                    await ops_test.model.applications[APP_NAME]
-                    .units[0]
-                    .run_action("add-vault-secret", path="vault-secrets", key="vault-secret2", value="world")
-                )
-                result = (await action.wait()).results
-                logger.info("action2 result: %s", result)
-                if "result" in result and result["result"] == "secret successfully created":
-                    break
-                time.sleep(2)
-
+            await add_vault_secret(ops_test, path="vault-secrets", key="vault-secret1", value="hello")
+            await add_vault_secret(ops_test, path="vault-secrets", key="vault-secret2", value="world")
             await ops_test.model.applications[APP_NAME].set_config({"secrets": SECRETS_WITH_VAULT_CONFIG})
 
             await ops_test.model.wait_for_idle(

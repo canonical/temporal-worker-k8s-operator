@@ -10,6 +10,10 @@ import hvac
 logger = logging.getLogger(__name__)
 
 
+class VaultOperationError(Exception):
+    """Exception raised for errors in the vault operations."""
+
+
 class VaultClient:
     """A client to interact with HashiCorp Vault.
 
@@ -23,11 +27,11 @@ class VaultClient:
         """Initialize the VaultClient with the specified parameters.
 
         Args:
-            address (str): The URL of the Vault server.
-            cert_path (str): Path to the certificate file for SSL verification.
-            role_id (str): The AppRole ID for authentication.
-            role_secret_id (str): The AppRole Secret ID for authentication.
-            mount_point (str): The mount point for the secret engine.
+            address: The URL of the Vault server.
+            cert_path: Path to the certificate file for SSL verification.
+            role_id: The AppRole ID for authentication.
+            role_secret_id: The AppRole Secret ID for authentication.
+            mount_point: The mount point for the secret engine.
         """
         self.client = hvac.Client(
             url=address,
@@ -40,8 +44,8 @@ class VaultClient:
         """Authenticate the client using the AppRole method.
 
         Args:
-            role_id (str): The AppRole ID for authentication.
-            role_secret_id (str): The AppRole Secret ID for authentication.
+            role_id: The AppRole ID for authentication.
+            role_secret_id: The AppRole Secret ID for authentication.
 
         Raises:
             Exception: If authentication fails.
@@ -61,8 +65,8 @@ class VaultClient:
         """Read a secret from Vault at the given path and returns the value for the specified key.
 
         Args:
-            path (str): The path to the secret in Vault.
-            key (str): The key within the secret data to retrieve.
+            path: The path to the secret in Vault.
+            key: The key within the secret data to retrieve.
 
         Returns:
             str: The value of the specified key.
@@ -83,12 +87,12 @@ class VaultClient:
         it updates the value if the key already exists.
 
         Args:
-            path (str): The path to the secret in Vault.
-            key (str): Key to store in Vault.
-            value (str): Value to store in Vault.
+            path: The path to the secret in Vault.
+            key: Key to store in Vault.
+            value: Value to store in Vault.
 
         Raises:
-            Exception: If the operation fails.
+            VaultOperationError: If the operation fails.
         """
         try:
             self.client.secrets.kv.v2.patch(path=path, secret={key: value}, mount_point=self.mount_point)
@@ -101,4 +105,4 @@ class VaultClient:
                 path=path, secret={key: value}, mount_point=self.mount_point
             )
         except Exception as e:
-            raise ValueError(f"Failed to write secret: {str(e)}") from e
+            raise VaultOperationError(f"Vault write operation failed: {e}") from e

@@ -4,12 +4,15 @@
 """Define the Vault relation."""
 
 import logging
+from pathlib import Path
+from typing import Optional
 
 from charms.vault_k8s.v0 import vault_kv
 from ops import framework
 from ops.model import ModelError
 
 from log import log_event_handler
+from vault.client import VaultClient
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +109,7 @@ class VaultRelation(framework.Object):
         role_id = secret_content["role-id"]
         role_secret_id = secret_content["role-secret-id"]
 
-        certs_path = self.charm.get_ca_cert_location_in_charm()
+        certs_path = self.get_ca_cert_location_in_charm()
         with open(f"{certs_path}/{VAULT_CA_CERT_FILENAME}", "w") as fd:
             fd.write(ca_certificate)
 
@@ -118,3 +121,35 @@ class VaultRelation(framework.Object):
             "vault_mount": mount,
             "vault_cert_path": VAULT_CERT_PATH,
         }
+
+    def get_vault_client(self):
+        """Initialize Vault client.
+
+        Returns:
+            Vault client.
+        """
+        ca_certificate_path = self.get_ca_cert_location_in_charm()
+        vault_config = self.get_vault_config()
+        return VaultClient(
+            address=vault_config["vault_address"],
+            cert_path=f"{ca_certificate_path}/{VAULT_CA_CERT_FILENAME}",
+            role_id=vault_config["vault_role_id"],
+            role_secret_id=vault_config["vault_role_secret_id"],
+            mount_point=vault_config["vault_mount"],
+        )
+
+    def get_ca_cert_location_in_charm(self) -> Optional[Path]:
+        """Return the CA certificate location in the charm (not in the workload).
+
+        This path would typically be: /var/lib/juju/storage/certs/0/ca.pem
+
+        Returns:
+            Path: The CA certificate location
+        """
+        storage = self.charm.model.storages
+        if "certs" not in storage:
+            return None
+        if len(storage["certs"]) == 0:
+            return None
+        cert_storage = storage["certs"][0]
+        return cert_storage.location
