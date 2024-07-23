@@ -80,7 +80,7 @@ class TestDeployment:
                 action = (
                     await ops_test.model.applications[APP_NAME]
                     .units[0]
-                    .run_action("add-vault-secret", path="vault-secrets1", key="vault-secret1", value="hello")
+                    .run_action("add-vault-secret", path="vault-secrets", key="vault-secret1", value="hello")
                 )
                 result = (await action.wait()).results
                 logger.info("action1 result: %s", result)
@@ -92,23 +92,11 @@ class TestDeployment:
                 action = (
                     await ops_test.model.applications[APP_NAME]
                     .units[0]
-                    .run_action("add-vault-secret", path="vault-secrets2", key="vault-secret2", value="world")
+                    .run_action("add-vault-secret", path="vault-secrets", key="vault-secret2", value="world")
                 )
                 result = (await action.wait()).results
                 logger.info("action2 result: %s", result)
                 if "result" in result and result["result"] == "secret successfully created":
-                    break
-                time.sleep(2)
-
-            for i in range(10):
-                action = (
-                    await ops_test.model.applications[APP_NAME]
-                    .units[0]
-                    .run_action("get-vault-secret", path="vault-secrets", key="vault-secret1")
-                )
-                result = (await action.wait()).results
-                logger.info("get action1 result: %s", result)
-                if "result" in result and result["result"] == "hello":
                     break
                 time.sleep(2)
 

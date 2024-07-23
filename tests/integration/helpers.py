@@ -34,9 +34,9 @@ SECRETS_WITH_VAULT_CONFIG = dedent(
                 - key1: value1
                 - key2: value2
             vault:
-                - path: vault-secrets1
+                - path: vault-secrets
                   key: vault-secret1
-                - path: vault-secrets2
+                - path: vault-secrets
                   key: vault-secret2
         """
 )

@@ -6,7 +6,8 @@
 import logging
 
 import hvac
-from hvac.exceptions import InvalidPath
+
+logger = logging.getLogger(__name__)
 
 
 class VaultClient:
@@ -71,18 +72,15 @@ class VaultClient:
         """
         try:
             secret = self.client.secrets.kv.v2.read_secret(path=path, mount_point=self.mount_point)
-            logging.info(f"DATA FETCHED: {secret}")
-            logging.info(f"nested data2: {secret['data']['data']}")
-            return secret["data"]["data"]["data"][key]
-        except InvalidPath as e:
-            logging.error(f"Invalid path while fetching from vault: {e}")
-            raise Exception(f"Invalid path while fetching from vault: {e}") from e
+            return secret["data"]["data"][key]
         except Exception as e:
-            logging.error(f"Error fetching from vault: {e}")
             raise Exception(f"Could not fetch from Vault: {e}") from e
 
     def write_secret(self, path: str, key: str, value: str):
         """Write a secret to Vault at the given path.
+
+        If a secret exists at the specified path, the new key is appended to it, or
+        it updates the value if the key already exists.
 
         Args:
             path (str): The path to the secret in Vault.
@@ -93,9 +91,14 @@ class VaultClient:
             Exception: If the operation fails.
         """
         try:
+            self.client.secrets.kv.v2.patch(path=path, secret={key: value}, mount_point=self.mount_point)
+            return
+        except hvac.exceptions.InvalidPath:
+            logger.info("Secret %s does not yet exist on path %s", key, path)
+
+        try:
             self.client.secrets.kv.v2.create_or_update_secret(
-                path=path, secret={"data": {key: value}}, mount_point=self.mount_point
+                path=path, secret={key: value}, mount_point=self.mount_point
             )
-            logging.info("Secret %s created in mount %s", key, self.mount_point)
         except Exception as e:
-            raise Exception(f"Failed to write secret: {str(e)}") from e
+            raise ValueError(f"Failed to write secret: {str(e)}") from e
