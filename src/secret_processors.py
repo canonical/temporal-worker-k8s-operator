@@ -77,11 +77,13 @@ def process_vault_secrets(charm, parsed_secrets_data):
         ValueError: If there is no vault relation, if there is an error initializing the vault client,
                     or if there is an error reading a vault secret.
     """
+    # TODO (kelkawi-a): Convert to using structured config
     charm_env = {}
-    if parsed_secrets_data.get("vault") and not charm.model.relations["vault"]:
+    vault_variables = parsed_secrets_data.get("vault", [])
+
+    if vault_variables and not charm.model.relations["vault"]:
         raise ValueError("No vault relation found to fetch secrets from")
 
-    vault_variables = parsed_secrets_data.get("vault", [])
     if vault_variables and charm.model.relations["vault"]:
         try:
             vault_client = charm.vault_relation.get_vault_client()

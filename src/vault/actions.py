@@ -34,13 +34,10 @@ class VaultActions(framework.Object):
         Args:
             event:The event triggered by the restart action
         """
-        container = self.charm.unit.get_container(self.charm.name)
-        if not container.can_connect():
-            event.fail("Failed to connect to the container")
-            return
-
-        if not self.charm.model.relations["vault"]:
-            event.fail("No vault relation found")
+        try:
+            self._validate_vault_relation()
+        except Exception as e:
+            event.fail(str(e))
 
         path, key, value = (event.params.get(param) for param in ["path", "key", "value"])
         if not all([path, key, value]):
@@ -49,13 +46,13 @@ class VaultActions(framework.Object):
         try:
             vault_client = self.charm.vault_relation.get_vault_client()
         except Exception:
-            event.fail("unable to initialize vault client. remove relation and retry.")
+            event.fail("Unable to initialize vault client. remove relation and retry.")
 
         try:
             vault_client.write_secret(path=path, key=key, value=value)
             self.charm._update(event)
         except ValueError as e:
-            logger.error("unable to create secret in vault: %s", str(e))
+            logger.error("Unable to create secret in vault: %s", str(e))
             event.fail(str(e))
             return
 
@@ -68,13 +65,10 @@ class VaultActions(framework.Object):
         Args:
             event:The event triggered by the restart action
         """
-        container = self.charm.unit.get_container(self.charm.name)
-        if not container.can_connect():
-            event.fail("Failed to connect to the container")
-            return
-
-        if not self.charm.model.relations["vault"]:
-            event.fail("No vault relation found")
+        try:
+            self._validate_vault_relation()
+        except Exception as e:
+            event.fail(str(e))
 
         path, key = (event.params.get(param) for param in ["path", "key"])
         if not all([path, key]):
@@ -95,3 +89,16 @@ class VaultActions(framework.Object):
             return
 
         event.set_results({"result": value})
+
+    def _validate_vault_relation(self):
+        """Validate Vault relation.
+
+        Raises:
+            Exception: if the Vault relation was not successfully validated.
+        """
+        container = self.charm.unit.get_container(self.charm.name)
+        if not container.can_connect():
+            raise Exception("Failed to connect to the container")
+
+        if not self.charm.model.relations["vault"]:
+            raise Exception("No vault relation found")

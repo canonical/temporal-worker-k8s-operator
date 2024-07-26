@@ -20,8 +20,8 @@ connect to a deployed Temporal server.
 
 ### Deploying
 
-To deploy the Temporal Worker operator charm, you can start by creating a
-Temporal workflow, or use the one provided in
+To deploy the Charmed Temporal Worker, you can start by creating a Temporal
+workflow, or use the one provided in
 [`resource_sample_py`](./resource_sample_py/). Once done, the project can be
 built as a [ROCK](https://documentation.ubuntu.com/rockcraft/en/stable/) and
 pushed to the [local registry](https://microk8s.io/docs/registry-built-in) by
@@ -31,8 +31,8 @@ running the following command inside the `resource_sample_py` directory:
 make -C resource_sample_py build_rock
 ```
 
-The Temporal Worker operator charm can then be deployed and connected to a
-deployed Temporal server using the Juju command line as follows:
+The Charmed Temporal Worker can then be deployed and connected to a deployed
+Temporal server using the Juju command line as follows:
 
 ```bash
 juju deploy temporal-worker-k8s --resource temporal-worker-image=localhost:32000/temporal-worker-rock
@@ -62,9 +62,9 @@ container.
 
 ### Adding Secrets & Environment Variables
 
-The Temporal Worker operator charm allows the user to configure multiple sources
-of environment variables and secrets to be injected into the workload container
-and consumed by the user's workflow definitions. These sources can be configured
+The Charmed Temporal Worker allows the user to configure multiple sources of
+environment variables and secrets to be injected into the workload container and
+consumed by the user's workflow definitions. These sources can be configured
 through the `secrets` config parameter of the charm. Below are the three sources
 of environment variables and secrets currently supported. A user may choose to
 use one, all or none of them. Once the `secrets.yaml` file is ready, it can be
@@ -126,11 +126,11 @@ secrets:
 
 #### Vault
 
-The Vault section below outlines how the Temporal Worker operator charm can be
-related to the Vault operator charm for storing secrets securely. Once done, the
-charm can be configured to fetch secrets from Vault and inject them as variables
-into the workload container. The secrets can be configured into the charm as
-follows:
+The Vault section below outlines how the Charmed Temporal Worker can be related
+to the [Vault operator charm](https://charmhub.io/vault-k8s) for storing secrets
+securely. Once done, the charm can be configured to fetch secrets from Vault and
+inject them as variables into the workload container. The secrets can be
+configured into the charm as follows:
 
 ##### **`secrets.yaml`**
 
@@ -185,9 +185,9 @@ juju scale-application temporal-worker-k8s <num_of_replicas_required_replicas>
 
 ## Error Monitoring
 
-The Temporal Worker operator charm has a built-in Sentry interceptor which can
-be used to intercept and capture errors from the Temporal SDK. To enable it, run
-the following commands:
+The Charmed Temporal Worker has a built-in Sentry interceptor which can be used
+to intercept and capture errors from the Temporal SDK. To enable it, run the
+following commands:
 
 ```bash
 juju config temporal-worker-k8s sentry-dsn=<YOUR_SENTRY_DSN>
@@ -197,7 +197,7 @@ juju config temporal-worker-k8s sentry-environment="staging"
 
 ## Observability
 
-The Temporal Worker operator charm can be related to the
+The Charmed Temporal Worker can be related to the
 [Canonical Observability Stack](https://charmhub.io/topics/canonical-observability-stack)
 in order to collect logs and telemetry. To deploy cos-lite and expose its
 endpoints as offers, follow these steps:
@@ -224,12 +224,12 @@ juju relate temporal-worker-k8s admin/cos.prometheus
 # Access grafana with username "admin" and password:
 juju run grafana/0 -m cos get-admin-password --wait 1m
 # Grafana is listening on port 3000 of the app ip address.
-# Dashboard can be accessed under "Temporal Worker SDK Metrics", make sure to select the juju model which contains your Temporal worker operator charm.
+# Dashboard can be accessed under "Temporal Worker SDK Metrics", make sure to select the juju model which contains your Charmed Temporal Worker.
 ```
 
 ## Vault
 
-The Temporal Worker operator charm can be related to the
+The Charmed Temporal Worker can be related to the
 [Vault operator charm](https://charmhub.io/vault-k8s) to securely store
 credentials that can be accessed by workflows. This is the recommended way of
 storing workflow-related credentials in production environments. To enable this,

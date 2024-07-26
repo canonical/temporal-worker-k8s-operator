@@ -179,6 +179,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         Returns:
             dict: A dictionary containing environment variables.
         """
+        self.vault_relation.update_vault_relation()
+
         secrets_config = self.config.get("secrets")
         parsed_secrets_data = secret_processors.parse_secrets(secrets_config)
 
@@ -246,8 +248,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         Args:
             event: The event triggered when the relation changed.
         """
-        self.vault_relation.update_vault_relation()
-
         container = self.unit.get_container(self.name)
         if not container.can_connect():
             event.defer()

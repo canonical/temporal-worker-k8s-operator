@@ -125,12 +125,10 @@ class VaultRelation(framework.Object):
             fd.write(ca_certificate)
 
         return {
-            "vault_address": vault_url,
-            "vault_ca_certificate_bytes": ca_certificate,
-            "vault_role_id": role_id,
-            "vault_role_secret_id": role_secret_id,
-            "vault_mount": mount,
-            "vault_cert_path": VAULT_CERT_PATH,
+            "address": vault_url,
+            "role_id": role_id,
+            "role_secret_id": role_secret_id,
+            "mount": mount,
         }
 
     def get_vault_client(self):
@@ -142,11 +140,8 @@ class VaultRelation(framework.Object):
         ca_certificate_path = self.get_ca_cert_location_in_charm()
         vault_config = self.get_vault_config()
         return VaultClient(
-            address=vault_config["vault_address"],
+            **vault_config,
             cert_path=f"{ca_certificate_path}/{VAULT_CA_CERT_FILENAME}",
-            role_id=vault_config["vault_role_id"],
-            role_secret_id=vault_config["vault_role_secret_id"],
-            mount_point=vault_config["vault_mount"],
         )
 
     def get_ca_cert_location_in_charm(self) -> Optional[Path]:
@@ -157,10 +152,7 @@ class VaultRelation(framework.Object):
         Returns:
             Path: The CA certificate location
         """
-        storage = self.charm.model.storages
-        if "certs" not in storage:
+        storage = self.charm.model.storages.get("certs")
+        if not storage:
             return None
-        if len(storage["certs"]) == 0:
-            return None
-        cert_storage = storage["certs"][0]
-        return cert_storage.location
+        return storage[0].location if storage else None
