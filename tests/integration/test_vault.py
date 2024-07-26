@@ -11,7 +11,7 @@ import pytest
 from conftest import deploy  # noqa: F401, pylint: disable=W0611
 from helpers import (
     APP_NAME,
-    SECRETS_WITH_VAULT_CONFIG,
+    ENVIRONMENT_WITH_VAULT_CONFIG,
     add_vault_secret,
     authorize_charm,
     get_unit_url,
@@ -78,7 +78,7 @@ class TestDeployment:
             logger.info("adding sample secrets to vault")
             await add_vault_secret(ops_test, path="vault-secrets", key="vault-secret1", value="hello")
             await add_vault_secret(ops_test, path="vault-secrets", key="vault-secret2", value="world")
-            await ops_test.model.applications[APP_NAME].set_config({"secrets": SECRETS_WITH_VAULT_CONFIG})
+            await ops_test.model.applications[APP_NAME].set_config({"environment": ENVIRONMENT_WITH_VAULT_CONFIG})
 
             await ops_test.model.wait_for_idle(
                 apps=[APP_NAME, "vault-k8s"],

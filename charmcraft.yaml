@@ -15,4 +15,4 @@ bases:
 parts:
   charm:
     charm-binary-python-packages:
-      - hvac
+      - hvac==2.3.0

@@ -131,15 +131,15 @@ class TestCharm(TestCase):
         got_plan = harness.get_container_pebble_plan("temporal-worker").to_dict()
         self.assertEqual(got_plan, want_plan)
 
-    def test_invalid_secrets_config(self):
-        """The charm raises goes into a blocked state if secrets config is incorrectly formatted."""
+    def test_invalid_environment_config(self):
+        """The charm raises goes into a blocked state if environment config is incorrectly formatted."""
         harness = self.harness
 
         simulate_lifecycle(harness, CONFIG)
         harness.charm.on.config_changed.emit()
-        invalid_secrets_config_env = dedent(
+        invalid_environment_config_env = dedent(
             """
-        secrets:
+        environment:
             env:
               - hello: world
                 wrong: key
@@ -147,42 +147,44 @@ class TestCharm(TestCase):
         )
 
         # with self.assertRaises(ValueError):
-        harness.update_config({"secrets": invalid_secrets_config_env})
+        harness.update_config({"environment": invalid_environment_config_env})
         self.assertEqual(
             harness.model.unit.status,
-            BlockedStatus("Invalid secrets structure: 'env' should be a list of single-key dictionaries"),
+            BlockedStatus("Invalid environment structure: 'env' should be a list of single-key dictionaries"),
         )
 
-        invalid_secrets_config_juju = dedent(
+        invalid_environment_config_juju = dedent(
             """
-        secrets:
+        environment:
             juju:
               - wrong: key
                 key: hello
         """
         )
 
-        harness.update_config({"secrets": invalid_secrets_config_juju})
+        harness.update_config({"environment": invalid_environment_config_juju})
         self.assertEqual(
             harness.model.unit.status,
             BlockedStatus(
-                "Invalid secrets structure: 'juju' should be a list of dictionaries with 'key' and 'secret-id'"
+                "Invalid environment structure: 'juju' should be a list of dictionaries with 'key' and 'secret-id'"
             ),
         )
 
-        invalid_secrets_config_vault = dedent(
+        invalid_environment_config_vault = dedent(
             """
-        secrets:
+        environment:
             vault:
               - path: path
                 value: wrong
         """
         )
 
-        harness.update_config({"secrets": invalid_secrets_config_vault})
+        harness.update_config({"environment": invalid_environment_config_vault})
         self.assertEqual(
             harness.model.unit.status,
-            BlockedStatus("Invalid secrets structure: 'vault' should be a list of dictionaries with 'path' and 'key'"),
+            BlockedStatus(
+                "Invalid environment structure: 'vault' should be a list of dictionaries with 'path' and 'key'"
+            ),
         )
 
     @mock.patch("ops.jujuversion.JujuVersion.from_environ")
@@ -190,10 +192,10 @@ class TestCharm(TestCase):
     @mock.patch("relations.vault.VaultRelation.get_vault_client")
     @mock.patch("os.makedirs")
     @mock.patch("builtins.open", new_callable=mock.mock_open)
-    def test_valid_secrets_config(
+    def test_valid_environment_config(
         self, mock_open, mock_makedirs, get_vault_client, get_vault_config, mock_from_environ
     ):
-        """The charm parses the secret config correctly."""
+        """The charm parses the environment config correctly."""
         harness = self.harness
 
         # Mock Vault client
@@ -213,7 +215,7 @@ class TestCharm(TestCase):
 
         secret_config = dedent(
             f"""
-        secrets:
+        environment:
             env:
                 - hello: world
                 - test: variable
@@ -227,7 +229,7 @@ class TestCharm(TestCase):
                   key: token
         """
         )
-        harness.update_config({"secrets": secret_config})
+        harness.update_config({"environment": secret_config})
 
         want_plan = {
             "services": {

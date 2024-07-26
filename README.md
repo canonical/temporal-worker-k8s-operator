@@ -65,17 +65,17 @@ container.
 The Charmed Temporal Worker allows the user to configure multiple sources of
 environment variables and secrets to be injected into the workload container and
 consumed by the user's workflow definitions. These sources can be configured
-through the `secrets` config parameter of the charm. Below are the three sources
-of environment variables and secrets currently supported. A user may choose to
-use one, all or none of them. Once the `secrets.yaml` file is ready, it can be
-configured into the charm as follows:
+through the `environment` config parameter of the charm. Below are the three
+sources of environment variables and secrets currently supported. A user may
+choose to use one, all or none of them. Once the `environment.yaml` file is
+ready, it can be configured into the charm as follows:
 
 ```bash
-juju config temporal-worker-k8s secrets=@/path/to/secrets.yaml
+juju config temporal-worker-k8s environment=@/path/to/environment.yaml
 ```
 
-These secrets can then be injested by the workflows by using the `os` package as
-follows:
+These environment variables can then be retrieved by the workflows by using the
+`os` package as follows:
 
 ```python
 import os
@@ -88,10 +88,10 @@ These are usually values that are not secret and can be stored as plaintext. An
 example is setting the application environment to `staging` or `production`.
 They can be set as follows:
 
-##### **`secrets.yaml`**
+##### **`environment.yaml`**
 
 ```yaml
-secrets:
+environment:
   env:
     - key1: value1
     - key2: value2
@@ -111,12 +111,12 @@ juju add-secret my-secret key1=value1 key2=value2
 juju grant-secret my-secret temporal-worker-k8s
 ```
 
-The secrets can then be configured into the charm as follows:
+The environment variables can then be configured into the charm as follows:
 
-##### **`secrets.yaml`**
+##### **`environment.yaml`**
 
 ```yaml
-secrets:
+environment:
   juju:
     - secret-id: <secret_id>
       key: key1
@@ -129,13 +129,13 @@ secrets:
 The Vault section below outlines how the Charmed Temporal Worker can be related
 to the [Vault operator charm](https://charmhub.io/vault-k8s) for storing secrets
 securely. Once done, the charm can be configured to fetch secrets from Vault and
-inject them as variables into the workload container. The secrets can be
-configured into the charm as follows:
+inject them as environment variables into the workload container. The secrets
+can be configured into the charm as follows:
 
-##### **`secrets.yaml`**
+##### **`environment.yaml`**
 
 ```yaml
-secrets:
+environment:
   vault:
     - path: my-secrets
       key: key1

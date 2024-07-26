@@ -27,9 +27,9 @@ BASE_WORKER_CONFIG = {
     "queue": "test-queue",
 }
 
-SECRETS_WITH_VAULT_CONFIG = dedent(
+ENVIRONMENT_WITH_VAULT_CONFIG = dedent(
     """
-        secrets:
+        environment:
             env:
                 - key1: value1
                 - key2: value2
@@ -53,9 +53,9 @@ def get_worker_config(secret_id):
     """
     return {
         **BASE_WORKER_CONFIG,
-        "secrets": dedent(
+        "environment": dedent(
             f"""
-        secrets:
+        environment:
             env:
                 - message: hello
                 - key2: value2

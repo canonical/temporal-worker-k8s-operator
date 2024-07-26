@@ -19,7 +19,7 @@ from ops import main, pebble
 from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 
-import secret_processors
+import environment_processors
 from literals import (
     LOG_FILE,
     PROMETHEUS_PORT,
@@ -173,7 +173,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         except pebble.ConnectionError:
             return False
 
-    def create_env(self):
+    def create_env(self) -> dict:
         """Create an environment dictionary with secrets from the parsed secrets data.
 
         Returns:
@@ -181,12 +181,12 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         """
         self.vault_relation.update_vault_relation()
 
-        secrets_config = self.config.get("secrets")
-        parsed_secrets_data = secret_processors.parse_secrets(secrets_config)
+        environment_config = self.config.get("environment")
+        parsed_environment_data = environment_processors.parse_environment(environment_config)
 
-        env_variables = secret_processors.process_env_variables(parsed_secrets_data)
-        juju_variables = secret_processors.process_juju_secrets(self, parsed_secrets_data)
-        vault_variables = secret_processors.process_vault_secrets(self, parsed_secrets_data)
+        env_variables = environment_processors.process_env_variables(parsed_environment_data)
+        juju_variables = environment_processors.process_juju_variables(self, parsed_environment_data)
+        vault_variables = environment_processors.process_vault_variables(self, parsed_environment_data)
 
         charm_env = {**env_variables, **juju_variables, **vault_variables}
         return charm_env
@@ -235,12 +235,12 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if self.config["sentry-dsn"] and (sample_rate < 0 or sample_rate > 1):
             raise ValueError("Invalid config: sentry-sample-rate must be between 0 and 1")
 
-        secrets_config = self.config.get("secrets")
-        if secrets_config:
+        environment_config = self.config.get("environment")
+        if environment_config:
             try:
-                yaml.safe_load(secrets_config)
+                yaml.safe_load(environment_config)
             except (yaml.parser.ParserError, yaml.scanner.ScannerError) as e:
-                raise ValueError(f"Incorrectly formatted `secrets` config: {e}") from e
+                raise ValueError(f"Incorrectly formatted `environment` config: {e}") from e
 
     def _update(self, event):  # noqa: C901
         """Update the Temporal worker configuration and replan its execution.
@@ -257,8 +257,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         context = {}
         try:
             self._validate(event)
-            secrets_config = self.config.get("secrets")
-            if secrets_config:
+            environment_config = self.config.get("environment")
+            if environment_config:
                 charm_config_env = self.create_env()
                 context.update(charm_config_env)
         except ValueError as err:
@@ -278,7 +278,9 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             if value:
                 context.update({key: value})
 
-        context.update({convert_env_var(key): value for key, value in self.config.items() if key not in ["secrets"]})
+        context.update(
+            {convert_env_var(key): value for key, value in self.config.items() if key not in ["environment"]}
+        )
         context.update({"TWC_PROMETHEUS_PORT": PROMETHEUS_PORT})
 
         pebble_layer = {

@@ -125,10 +125,10 @@ class VaultRelation(framework.Object):
             fd.write(ca_certificate)
 
         return {
-            "address": vault_url,
-            "role_id": role_id,
-            "role_secret_id": role_secret_id,
-            "mount": mount,
+            "vault_address": vault_url,
+            "vault_role_id": role_id,
+            "vault_role_secret_id": role_secret_id,
+            "vault_mount": mount,
         }
 
     def get_vault_client(self):
@@ -140,7 +140,10 @@ class VaultRelation(framework.Object):
         ca_certificate_path = self.get_ca_cert_location_in_charm()
         vault_config = self.get_vault_config()
         return VaultClient(
-            **vault_config,
+            address=vault_config["vault_address"],
+            role_id=vault_config["vault_role_id"],
+            role_secret_id=vault_config["vault_role_secret_id"],
+            mount_point=vault_config["vault_mount"],
             cert_path=f"{ca_certificate_path}/{VAULT_CA_CERT_FILENAME}",
         )
 

@@ -12,25 +12,25 @@ from ops.model import ModelError, SecretNotFoundError
 logger = logging.getLogger(__name__)
 
 
-def process_env_variables(parsed_secrets_data):
+def process_env_variables(parsed_environment_data):
     """Process environment variables from the parsed secrets data.
 
     Args:
-        parsed_secrets_data: Parsed secrets data.
+        parsed_environment_data: Parsed secrets data.
 
     Returns:
         dict: A dictionary containing environment variables.
     """
-    env_variables = parsed_secrets_data.get("env", {})
+    env_variables = parsed_environment_data.get("env", {})
     return env_variables
 
 
-def process_juju_secrets(charm, parsed_secrets_data):
+def process_juju_variables(charm, parsed_environment_data):
     """Process Juju secrets from the parsed secrets data.
 
     Args:
         charm: The charm to perform operations on.
-        parsed_secrets_data: Parsed secrets data.
+        parsed_environment_data: Parsed secrets data.
 
     Returns:
         dict: A dictionary containing Juju secrets.
@@ -41,10 +41,10 @@ def process_juju_secrets(charm, parsed_secrets_data):
                     or if the charm does not have permission to access the specified Juju secret.
     """
     charm_env = {}
-    if parsed_secrets_data.get("juju") and not JujuVersion.from_environ().has_secrets:
+    if parsed_environment_data.get("juju") and not JujuVersion.from_environ().has_secrets:
         raise ValueError("Juju version does not support Juju user secrets")
 
-    juju_variables = parsed_secrets_data.get("juju", [])
+    juju_variables = parsed_environment_data.get("juju", [])
     for juju_secret in juju_variables:
         try:
             secret_id = juju_secret.get("secret-id")
@@ -63,12 +63,12 @@ def process_juju_secrets(charm, parsed_secrets_data):
     return charm_env
 
 
-def process_vault_secrets(charm, parsed_secrets_data):
+def process_vault_variables(charm, parsed_environment_data):
     """Process Vault secrets from the parsed secrets data.
 
     Args:
         charm: The charm to perform operations on.
-        parsed_secrets_data: Parsed secrets data.
+        parsed_environment_data: Parsed secrets data.
 
     Returns:
         dict: A dictionary containing Vault secrets.
@@ -79,7 +79,7 @@ def process_vault_secrets(charm, parsed_secrets_data):
     """
     # TODO (kelkawi-a): Convert to using structured config
     charm_env = {}
-    vault_variables = parsed_secrets_data.get("vault", [])
+    vault_variables = parsed_environment_data.get("vault", [])
 
     if vault_variables and not charm.model.relations["vault"]:
         raise ValueError("No vault relation found to fetch secrets from")
@@ -103,8 +103,8 @@ def process_vault_secrets(charm, parsed_secrets_data):
     return charm_env
 
 
-def parse_secrets(yaml_string):
-    """Parse a YAML string containing secrets and validates its structure.
+def parse_environment(yaml_string):
+    """Parse a YAML string containing environment variables and validates its structure.
 
     The YAML string should contain a 'secrets' key with nested 'env', 'juju', and 'vault' keys.
     Each nested key should follow a specific structure:
@@ -130,37 +130,39 @@ def parse_secrets(yaml_string):
     data = yaml.safe_load(yaml_string)
 
     # Validate the main structure
-    if not isinstance(data, dict) or "secrets" not in data:
-        raise ValueError("Invalid secrets structure: 'secrets' key not found")
+    if not isinstance(data, dict) or "environment" not in data:
+        raise ValueError("Invalid environment structure: 'environment' key not found")
 
-    secrets_key = data["secrets"]
-    if not isinstance(secrets_key, dict):
-        raise ValueError("Invalid secrets structure: 'secrets' should be a dictionary")
+    environment_key = data["environment"]
+    if not isinstance(environment_key, dict):
+        raise ValueError("Invalid environment structure: 'environment' should be a dictionary")
 
     # Validate env key
-    env = secrets_key.get("env", [])
+    env = environment_key.get("env", [])
     if not isinstance(env, list) or not all(isinstance(item, dict) and len(item) == 1 for item in env):
-        raise ValueError("Invalid secrets structure: 'env' should be a list of single-key dictionaries")
+        raise ValueError("Invalid environment structure: 'env' should be a list of single-key dictionaries")
 
     # Validate juju key
-    juju = secrets_key.get("juju", [])
+    juju = environment_key.get("juju", [])
     if not isinstance(juju, list) or not all(
         isinstance(item, dict) and "key" in item and (("secret-id" in item) and len(item) == 2) for item in juju
     ):
         raise ValueError(
-            "Invalid secrets structure: 'juju' should be a list of dictionaries with 'key' and 'secret-id'"
+            "Invalid environment structure: 'juju' should be a list of dictionaries with 'key' and 'secret-id'"
         )
 
     # Validate vault key
-    vault = secrets_key.get("vault", [])
+    vault = environment_key.get("vault", [])
     if not isinstance(vault, list) or not all(
         isinstance(item, dict) and "path" in item and "key" in item and len(item) == 2 for item in vault
     ):
-        raise ValueError("Invalid secrets structure: 'vault' should be a list of dictionaries with 'path' and 'key'")
+        raise ValueError(
+            "Invalid environment structure: 'vault' should be a list of dictionaries with 'path' and 'key'"
+        )
 
-    env = secrets_key.get("env", [])
-    juju = secrets_key.get("juju", [])
-    vault = secrets_key.get("vault", [])
+    env = environment_key.get("env", [])
+    juju = environment_key.get("juju", [])
+    vault = environment_key.get("vault", [])
 
     parsed_data = {
         "env": {list(item.keys())[0]: list(item.values())[0] for item in env},
