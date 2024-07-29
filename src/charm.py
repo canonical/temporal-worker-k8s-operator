@@ -140,8 +140,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         """
         try:
             self._validate(event)
-            secrets_config = self.config.get("secrets")
-            if secrets_config:
+            environment_config = self.config.get("environment")
+            if environment_config:
                 self.create_env()
         except ValueError as err:
             self.unit.status = BlockedStatus(str(err))

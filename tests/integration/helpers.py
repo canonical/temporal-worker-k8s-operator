@@ -29,19 +29,18 @@ BASE_WORKER_CONFIG = {
 
 ENVIRONMENT_WITH_VAULT_CONFIG = dedent(
     """
-        environment:
-            env:
-                - name: key1
-                  value: value1
-                - name: key2
-                  value: value2
-            vault:
-                - path: vault-secrets
-                  name: vault-key1
-                  key: vault-secret1
-                - path: vault-secrets
-                  name: vault-key2
-                  key: vault-secret2
+        env:
+            - name: key1
+              value: value1
+            - name: key2
+              value: value2
+        vault:
+            - path: vault-secrets
+              name: vault-key1
+              key: vault-secret1
+            - path: vault-secrets
+              name: vault-key2
+              key: vault-secret2
         """
 )
 
@@ -59,19 +58,18 @@ def get_worker_config(secret_id):
         **BASE_WORKER_CONFIG,
         "environment": dedent(
             f"""
-        environment:
-            env:
-                - name: message
-                  value: hello
-                - name: key2
-                  value: value2
-            juju:
-                - secret-id: {secret_id}
-                  name: juju-key1
-                  key: juju-secret1
-                - secret-id: {secret_id}
-                  name: juju-key2
-                  key: juju-secret2
+        env:
+            - name: message
+              value: hello
+            - name: key2
+              value: value2
+        juju:
+            - secret-id: {secret_id}
+              name: juju-key1
+              key: juju-secret1
+            - secret-id: {secret_id}
+              name: juju-key2
+              key: juju-secret2
         """
         ),
     }
