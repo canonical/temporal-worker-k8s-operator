@@ -28,6 +28,11 @@ issues: https://github.com/canonical/temporal-worker-k8s-operator/issues
 assumes:
   - k8s-api
 
+storage:
+  certs:
+    type: filesystem
+    minimum-size: 5M
+
 peers:
   peer:
     interface: temporal
@@ -39,11 +44,7 @@ containers:
 resources:
   temporal-worker-image:
     type: oci-image
-    description: OCI image containing Python package.
-  env-file:
-    type: file
-    description: .env file containing environment variables to be sourced to the workload container.
-    filename: '.env'
+    description: OCI image containing Temporal worker definition.
 
 provides:
   metrics-endpoint:

@@ -146,3 +146,43 @@ options:
     description: Client certificate URL for OIDC authentication.
     default: ""
     type: string
+
+  environment:
+    description: |
+      This configuration is used to manage and retrieve sensitive information required 
+      by the application from different sources. The `environment` configuration supports 
+      the following sources:
+      
+      - **Environment Variables**: Plaintext environment variables.
+      - **Juju**: Secrets can be managed and retrieved using Juju's secret storage capabilities.
+      - **Vault**: Secrets can be securely stored and accessed from a HashiCorp Vault instance.
+      
+      The application will prioritize these sources in the following order: Vault, Juju, 
+      and then environment variables. If a variable is not found in the higher priority 
+      sources, it will fallback to the next available source. This ensures that the 
+      application can function correctly in various deployment scenarios while maintaining 
+      security and flexibility.
+
+      Sample structure:
+    
+        ```yaml
+          environment:
+            env:
+              - name: key1
+                value: value1
+            juju:
+              - secret-id: <secret_id>
+                name: sensitive1
+                key: key1
+              - secret-id: <secret_id>
+                name: sensitive2
+                key: key2
+            vault:
+              - path: my-secrets
+                name: sensitive1
+                key: key1
+              - path: my-secrets
+                name: sensitive2
+                key: key2
+        ```
+    type: string

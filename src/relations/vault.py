@@ -4,17 +4,21 @@
 """Define the Vault relation."""
 
 import logging
+from pathlib import Path
+from typing import Optional
 
 from charms.vault_k8s.v0 import vault_kv
 from ops import framework
 from ops.model import ModelError
 
 from log import log_event_handler
+from vault.client import VaultClient
 
 logger = logging.getLogger(__name__)
 
 VAULT_NONCE_SECRET_LABEL = "nonce"  # nosec
 VAULT_CERT_PATH = "/vault/cert.pem"
+VAULT_CA_CERT_FILENAME = "ca.pem"
 
 
 class VaultRelation(framework.Object):
@@ -62,6 +66,17 @@ class VaultRelation(framework.Object):
         """
         self.charm._update(event)
 
+    def update_vault_relation(self):
+        """Update Vault relation binding."""
+        binding = self.charm.model.get_binding("vault")
+        if binding is not None:
+            try:
+                egress_subnet = str(binding.network.interfaces[0].subnet)
+                relation = self.charm.model.get_relation("vault")
+                self.charm.vault.request_credentials(relation, egress_subnet, self.get_vault_nonce())
+            except Exception as e:
+                logger.warning(f"failed to update vault relation - {repr(e)}")
+
     def get_vault_nonce(self):
         """Retrieve the Vault nonce.
 
@@ -79,7 +94,7 @@ class VaultRelation(framework.Object):
             logger.debug(f"Secret {VAULT_NONCE_SECRET_LABEL} not found: {e}")
             raise ModelError from e
 
-    def _get_vault_config(self):
+    def get_vault_config(self):
         """Retrieve Vault configuration details.
 
         Returns:
@@ -105,11 +120,42 @@ class VaultRelation(framework.Object):
         role_id = secret_content["role-id"]
         role_secret_id = secret_content["role-secret-id"]
 
+        certs_path = self.get_ca_cert_location_in_charm()
+        with open(f"{certs_path}/{VAULT_CA_CERT_FILENAME}", "w") as fd:
+            fd.write(ca_certificate)
+
         return {
-            "TWC_VAULT_ADDR": vault_url,
-            "TWC_VAULT_CACERT_BYTES": ca_certificate,
-            "TWC_VAULT_ROLE_ID": role_id,
-            "TWC_VAULT_ROLE_SECRET_ID": role_secret_id,
-            "TWC_VAULT_MOUNT": mount,
-            "TWC_VAULT_CERT_PATH": VAULT_CERT_PATH,
+            "vault_address": vault_url,
+            "vault_role_id": role_id,
+            "vault_role_secret_id": role_secret_id,
+            "vault_mount": mount,
         }
+
+    def get_vault_client(self):
+        """Initialize Vault client.
+
+        Returns:
+            Vault client.
+        """
+        ca_certificate_path = self.get_ca_cert_location_in_charm()
+        vault_config = self.get_vault_config()
+        return VaultClient(
+            address=vault_config["vault_address"],
+            role_id=vault_config["vault_role_id"],
+            role_secret_id=vault_config["vault_role_secret_id"],
+            mount_point=vault_config["vault_mount"],
+            cert_path=f"{ca_certificate_path}/{VAULT_CA_CERT_FILENAME}",
+        )
+
+    def get_ca_cert_location_in_charm(self) -> Optional[Path]:
+        """Return the CA certificate location in the charm (not in the workload).
+
+        This path would typically be: /var/lib/juju/storage/certs/0/ca.pem
+
+        Returns:
+            Path: The CA certificate location
+        """
+        storage = self.charm.model.storages.get("certs")
+        if not storage:
+            return None
+        return storage[0].location if storage else None

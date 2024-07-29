@@ -6,13 +6,14 @@
 """Temporal worker charm unit tests."""
 
 import json
-from unittest import TestCase
+from textwrap import dedent
+from unittest import TestCase, mock
 
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 from ops.testing import Harness
 
 from charm import TemporalWorkerK8SOperatorCharm
-from tests.unit.literals import CONFIG, CONTAINER_NAME, EXPECTED_VAULT_ENV, WANT_ENV
+from tests.unit.literals import CONFIG, CONTAINER_NAME, VAULT_CONFIG, WANT_ENV
 
 
 class TestCharm(TestCase):
@@ -82,7 +83,9 @@ class TestCharm(TestCase):
             ActiveStatus(f"worker listening to namespace {CONFIG['namespace']!r} on queue {CONFIG['queue']!r}"),
         )
 
-    def test_vault_relation(self):
+    @mock.patch("os.makedirs")
+    @mock.patch("builtins.open", new_callable=mock.mock_open)
+    def test_vault_relation(self, mock_open, mock_makedirs):
         """The charm is ready with vault relation."""
         harness = self.harness
 
@@ -100,7 +103,7 @@ class TestCharm(TestCase):
                     "command": "./app/scripts/start-worker.sh",
                     "startup": "enabled",
                     "override": "replace",
-                    "environment": {**WANT_ENV, **EXPECTED_VAULT_ENV},
+                    "environment": WANT_ENV,
                 }
             },
         }
@@ -120,7 +123,139 @@ class TestCharm(TestCase):
                     "command": "./app/scripts/start-worker.sh",
                     "startup": "enabled",
                     "override": "replace",
-                    "environment": {**WANT_ENV},
+                    "environment": WANT_ENV,
+                }
+            },
+        }
+
+        got_plan = harness.get_container_pebble_plan("temporal-worker").to_dict()
+        self.assertEqual(got_plan, want_plan)
+
+    def test_invalid_environment_config(self):
+        """The charm raises goes into a blocked state if environment config is incorrectly formatted."""
+        harness = self.harness
+
+        simulate_lifecycle(harness, CONFIG)
+        harness.charm.on.config_changed.emit()
+        invalid_environment_config_env = dedent(
+            """
+        environment:
+            env:
+              - hello: world
+                wrong: key
+        """
+        )
+
+        # with self.assertRaises(ValueError):
+        harness.update_config({"environment": invalid_environment_config_env})
+        self.assertEqual(
+            harness.model.unit.status,
+            BlockedStatus(
+                "Invalid environment structure: 'env' should be a list of dictionaries with 'name' and 'value'"
+            ),
+        )
+
+        invalid_environment_config_juju = dedent(
+            """
+        environment:
+            juju:
+              - wrong: key
+                key: hello
+        """
+        )
+
+        harness.update_config({"environment": invalid_environment_config_juju})
+        self.assertEqual(
+            harness.model.unit.status,
+            BlockedStatus(
+                "Invalid environment structure: 'juju' should be a list of dictionaries with 'secret-id', 'name', and 'key'"
+            ),
+        )
+
+        invalid_environment_config_vault = dedent(
+            """
+        environment:
+            vault:
+              - path: path
+                value: wrong
+        """
+        )
+
+        harness.update_config({"environment": invalid_environment_config_vault})
+        self.assertEqual(
+            harness.model.unit.status,
+            BlockedStatus(
+                "Invalid environment structure: 'vault' should be a list of dictionaries with 'path', 'name', and 'key'"
+            ),
+        )
+
+    @mock.patch("ops.jujuversion.JujuVersion.from_environ")
+    @mock.patch("relations.vault.VaultRelation.get_vault_config", return_value=VAULT_CONFIG)
+    @mock.patch("relations.vault.VaultRelation.get_vault_client")
+    @mock.patch("os.makedirs")
+    @mock.patch("builtins.open", new_callable=mock.mock_open)
+    def test_valid_environment_config(
+        self, mock_open, mock_makedirs, get_vault_client, get_vault_config, mock_from_environ
+    ):
+        """The charm parses the environment config correctly."""
+        harness = self.harness
+
+        # Mock Vault client
+        mock_vault_client = mock.Mock()
+        mock_vault_client.read_secret.return_value = "token_secret"
+        get_vault_client.return_value = mock_vault_client
+
+        # Mock JujuVersion.from_environ().has_secrets
+        mock_juju_version = mock.Mock()
+        mock_juju_version.has_secrets = True
+        mock_from_environ.return_value = mock_juju_version
+
+        secret_id = simulate_lifecycle(harness, CONFIG)
+        secret_id = secret_id.split(":")[-1]
+        add_vault_relation(self, harness)
+        self.harness.update_config({})
+
+        environment_config = dedent(
+            f"""
+        environment:
+            env:
+                - name: hello
+                  value: world
+                - name: test
+                  value: variable
+            juju:
+                - secret-id: {secret_id}
+                  name: sensitive1
+                  key: key1
+                - secret-id: {secret_id}
+                  name: sensitive2
+                  key: key2
+            vault:
+                - path: secrets
+                  name: access_token
+                  key: token
+        """
+        )
+        harness.update_config({"environment": environment_config})
+
+        want_plan = {
+            "services": {
+                "temporal-worker": {
+                    "summary": "temporal worker",
+                    "command": "./app/scripts/start-worker.sh",
+                    "startup": "enabled",
+                    "override": "replace",
+                    "environment": {
+                        **WANT_ENV,
+                        # User added secrets through config
+                        **{
+                            "hello": "world",
+                            "test": "variable",
+                            "sensitive1": "hello",
+                            "sensitive2": "world",
+                            "access_token": "token_secret",
+                        },
+                    },
                 }
             },
         }
@@ -175,6 +310,9 @@ def simulate_lifecycle(harness, config):
     Args:
         harness: ops.testing.Harness object used to simulate charm lifecycle.
         config: object to update the charm's config.
+
+    Returns:
+        Juju secret ID.
     """
     # Simulate peer relation readiness.
     harness.add_relation("peer", "temporal")
@@ -184,3 +322,10 @@ def simulate_lifecycle(harness, config):
     harness.charm.on.temporal_worker_pebble_ready.emit(container)
 
     harness.update_config(config)
+
+    secret_id = harness.add_model_secret(
+        "temporal-worker-k8s",
+        {"key1": "hello", "key2": "world"},
+    )
+
+    return secret_id

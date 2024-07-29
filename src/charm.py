@@ -10,21 +10,16 @@ import logging
 import os
 import secrets
 
+import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.vault_k8s.v0 import vault_kv
-from dotenv import dotenv_values
 from ops import main, pebble
 from ops.charm import CharmBase
-from ops.model import (
-    ActiveStatus,
-    BlockedStatus,
-    MaintenanceStatus,
-    ModelError,
-    WaitingStatus,
-)
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 
+import environment_processors
 from literals import (
     LOG_FILE,
     PROMETHEUS_PORT,
@@ -35,8 +30,9 @@ from literals import (
     VALID_LOG_LEVELS,
 )
 from log import log_event_handler
-from relations.vault import VAULT_CERT_PATH, VAULT_NONCE_SECRET_LABEL, VaultRelation
+from relations.vault import VAULT_NONCE_SECRET_LABEL, VaultRelation
 from state import State
+from vault.actions import VaultActions
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +63,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             mount_suffix=self.app.name,
         )
         self.vault_relation = VaultRelation(self)
+        self.vault_actions = VaultActions(self)
 
         # Prometheus
         self._prometheus_scraping = MetricsEndpointProvider(
@@ -117,7 +114,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         """
         container = self.unit.get_container(self.name)
         if not container.can_connect():
-            event.defer()
+            event.fail("Failed to connect to the container")
             return
 
         self.unit.status = MaintenanceStatus("restarting worker")
@@ -144,7 +141,11 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         """
         try:
             self._validate(event)
-        except ValueError:
+            secrets_config = self.config.get("secrets")
+            if secrets_config:
+                self.create_env()
+        except ValueError as err:
+            self.unit.status = BlockedStatus(str(err))
             return
 
         container = self.unit.get_container(self.name)
@@ -172,37 +173,23 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         except pebble.ConnectionError:
             return False
 
-    def _process_env_file(self, event):
-        """Process env file attached by user.
+    def create_env(self) -> dict:
+        """Create an environment dictionary with secrets from the parsed secrets data.
 
-        This method extracts the env file provided by the user and stores the data in the
-        charm's data bucket.
-
-        Args:
-            event: The event triggered when the relation changed.
-
-        Raises:
-            ValueError: if env file contains variable starting with reserved prefix.
+        Returns:
+            dict: A dictionary containing environment variables.
         """
-        if not self._state.is_ready():
-            event.defer()
-            return
+        self.vault_relation.update_vault_relation()
 
-        if self.unit.is_leader():
-            self._state.env = None
+        environment_config = self.config.get("environment")
+        parsed_environment_data = environment_processors.parse_environment(environment_config)
 
-        try:
-            resource_path = self.model.resources.fetch("env-file")
-            env = dotenv_values(resource_path)
+        env_variables = environment_processors.process_env_variables(parsed_environment_data)
+        juju_variables = environment_processors.process_juju_variables(self, parsed_environment_data)
+        vault_variables = environment_processors.process_vault_variables(self, parsed_environment_data)
 
-            for key, _ in env.items():
-                if key.startswith("TWC_"):
-                    raise ValueError("Invalid state: 'TWC_' env variable prefix is reserved")
-
-            if self.unit.is_leader():
-                self._state.env = env
-        except ModelError as err:
-            logger.debug("env-file resource not found %s", err)
+        charm_env = {**env_variables, **juju_variables, **vault_variables}
+        return charm_env
 
     def _check_required_config(self, config_list):
         """Check if required config has been set by user.
@@ -233,8 +220,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if not self._state.is_ready():
             raise ValueError("peer relation not ready")
 
-        self._process_env_file(event)
-
         self._check_required_config(REQUIRED_CHARM_CONFIG)
 
         if self.config["auth-provider"]:
@@ -250,29 +235,37 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if self.config["sentry-dsn"] and (sample_rate < 0 or sample_rate > 1):
             raise ValueError("Invalid config: sentry-sample-rate must be between 0 and 1")
 
+        environment_config = self.config.get("environment")
+        if environment_config:
+            try:
+                yaml.safe_load(environment_config)
+            except (yaml.parser.ParserError, yaml.scanner.ScannerError) as e:
+                raise ValueError(f"Incorrectly formatted `environment` config: {e}") from e
+
     def _update(self, event):  # noqa: C901
         """Update the Temporal worker configuration and replan its execution.
 
         Args:
             event: The event triggered when the relation changed.
         """
-        try:
-            self._validate(event)
-        except ValueError as err:
-            self.unit.status = BlockedStatus(str(err))
-            return
-
         container = self.unit.get_container(self.name)
         if not container.can_connect():
             event.defer()
             self.unit.status = WaitingStatus("waiting for pebble api")
             return
 
-        logger.info("Configuring Temporal worker")
-
         context = {}
-        if self._state.env:
-            context.update(self._state.env)
+        try:
+            self._validate(event)
+            environment_config = self.config.get("environment")
+            if environment_config:
+                charm_config_env = self.create_env()
+                context.update(charm_config_env)
+        except ValueError as err:
+            self.unit.status = BlockedStatus(str(err))
+            return
+
+        logger.info("Configuring Temporal worker")
 
         proxy_vars = {
             "HTTP_PROXY": "JUJU_CHARM_HTTP_PROXY",
@@ -285,27 +278,10 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             if value:
                 context.update({key: value})
 
-        context.update({convert_env_var(key): value for key, value in self.config.items()})
+        context.update(
+            {convert_env_var(key): value for key, value in self.config.items() if key not in ["environment"]}
+        )
         context.update({"TWC_PROMETHEUS_PORT": PROMETHEUS_PORT})
-
-        try:
-            vault_config = self.vault_relation._get_vault_config()
-        except ValueError as err:
-            self.unit.status = BlockedStatus(str(err))
-            return
-
-        if vault_config:
-            context.update(vault_config)
-            container.push(VAULT_CERT_PATH, vault_config.get("TWC_VAULT_CACERT_BYTES"), make_dirs=True)
-
-        # update vault relation if exists
-        binding = self.model.get_binding("vault")
-        if binding is not None:
-            try:
-                egress_subnet = str(binding.network.interfaces[0].subnet)
-                self.vault.request_credentials(event.relation, egress_subnet, self.vault_relation.get_vault_nonce())
-            except Exception as e:
-                logger.warning(f"failed to update vault relation - {repr(e)}")
 
         pebble_layer = {
             "summary": "temporal worker layer",

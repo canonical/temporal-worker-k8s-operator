@@ -33,13 +33,13 @@ CONFIG = {
     "oidc-client-cert-url": "",
 }
 
-EXPECTED_VAULT_ENV = {
-    "TWC_VAULT_ADDR": "127.0.0.1:8081",
-    "TWC_VAULT_CACERT_BYTES": "abcd",
-    "TWC_VAULT_MOUNT": "temporal-worker-k8s",
-    "TWC_VAULT_ROLE_ID": "111",
-    "TWC_VAULT_ROLE_SECRET_ID": "222",
-    "TWC_VAULT_CERT_PATH": "/vault/cert.pem",
+VAULT_CONFIG = {
+    "vault_address": "127.0.0.1:8081",
+    "vault_ca_certificate_bytes": "abcd",
+    "vault_mount": "temporal-worker-k8s",
+    "vault_role_id": "111",
+    "vault_role_secret_id": "222",
+    "vault_cert_path": "/vault/cert.pem",
 }
 
 WANT_ENV = {
