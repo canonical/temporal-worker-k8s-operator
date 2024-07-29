@@ -31,12 +31,16 @@ ENVIRONMENT_WITH_VAULT_CONFIG = dedent(
     """
         environment:
             env:
-                - key1: value1
-                - key2: value2
+                - name: key1
+                  value: value1
+                - name: key2
+                  value: value2
             vault:
                 - path: vault-secrets
+                  name: vault-key1
                   key: vault-secret1
                 - path: vault-secrets
+                  name: vault-key2
                   key: vault-secret2
         """
 )
@@ -57,12 +61,16 @@ def get_worker_config(secret_id):
             f"""
         environment:
             env:
-                - message: hello
-                - key2: value2
+                - name: message
+                  value: hello
+                - name: key2
+                  value: value2
             juju:
                 - secret-id: {secret_id}
+                  name: juju-key1
                   key: juju-secret1
                 - secret-id: {secret_id}
+                  name: juju-key2
                   key: juju-secret2
         """
         ),

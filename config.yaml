@@ -168,17 +168,21 @@ options:
         ```yaml
           environment:
             env:
-              - key1: value1
-              - key2: value2
+              - name: key1
+                value: value1
             juju:
               - secret-id: <secret_id>
-                key: sensitive1
+                name: sensitive1
+                key: key1
               - secret-id: <secret_id>
-                key: sensitive2
+                name: sensitive2
+                key: key2
             vault:
               - path: my-secrets
+                name: sensitive1
                 key: key1
               - path: my-secrets
+                name: sensitive2
                 key: key2
         ```
     type: string

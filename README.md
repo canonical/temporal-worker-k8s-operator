@@ -93,8 +93,10 @@ They can be set as follows:
 ```yaml
 environment:
   env:
-    - key1: value1
-    - key2: value2
+    - name: key1
+      value: value1
+    - name: key2
+      value: value2
 ```
 
 #### Juju User Secrets (Requires Juju 3.3+)
@@ -119,8 +121,10 @@ The environment variables can then be configured into the charm as follows:
 environment:
   juju:
     - secret-id: <secret_id>
+      name: env_var1
       key: key1
     - secret-id: <secret_id>
+      name: env_var2
       key: key2
 ```
 
@@ -138,8 +142,10 @@ can be configured into the charm as follows:
 environment:
   vault:
     - path: my-secrets
+      name: env_var1
       key: key1
     - path: my-secrets
+      name: env_var2
       key: key2
 ```
 

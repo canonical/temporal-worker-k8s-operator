@@ -21,8 +21,14 @@ def process_env_variables(parsed_environment_data):
     Returns:
         dict: A dictionary containing environment variables.
     """
+    charm_env = {}
     env_variables = parsed_environment_data.get("env", {})
-    return env_variables
+    for env_variable in env_variables:
+        key_name = env_variable.get("name")
+        key_value = env_variable.get("value")
+        charm_env.update({key_name: key_value})
+
+    return charm_env
 
 
 def process_juju_variables(charm, parsed_environment_data):
@@ -48,10 +54,12 @@ def process_juju_variables(charm, parsed_environment_data):
     for juju_secret in juju_variables:
         try:
             secret_id = juju_secret.get("secret-id")
-            key = juju_secret.get("key")
+            key_name = juju_secret.get("name")
+            from_key = juju_secret.get("key")
+
             secret = charm.model.get_secret(id=secret_id)
             secret_content = secret.get_content(refresh=True)
-            charm_env.update({key: secret_content[key]})
+            charm_env.update({key_name: secret_content[from_key]})
         except SecretNotFoundError as e:
             raise ValueError(f"Juju secret `{secret_id}` not found") from e
         except ModelError as e:
@@ -92,13 +100,14 @@ def process_vault_variables(charm, parsed_environment_data):
             raise ValueError("Unable to initialize vault client. Remove relation and retry.") from e
 
         for item in vault_variables:
-            key = item.get("key")
+            key_name = item.get("name")
+            from_key = item.get("key")
             path = item.get("path")
             try:
-                secret = vault_client.read_secret(path=path, key=key)
+                secret = vault_client.read_secret(path=path, key=from_key)
             except Exception as e:
-                raise ValueError(f"Unable to read vault secret `{key}` at path `{path}`: {e}") from e
-            charm_env.update({key: secret})
+                raise ValueError(f"Unable to read vault secret `{from_key}` at path `{path}`: {e}") from e
+            charm_env.update({key_name: secret})
 
     return charm_env
 
@@ -106,11 +115,11 @@ def process_vault_variables(charm, parsed_environment_data):
 def parse_environment(yaml_string):
     """Parse a YAML string containing environment variables and validates its structure.
 
-    The YAML string should contain a 'secrets' key with nested 'env', 'juju', and 'vault' keys.
+    The YAML string should contain an 'environment' key with nested 'env', 'juju', and 'vault' keys.
     Each nested key should follow a specific structure:
-        - 'env': A list of single-key dictionaries.
-        - 'juju': A list of dictionaries with 'secret-id' and 'key' keys.
-        - 'vault': A list of dictionaries with 'path' and 'key' keys.
+        - 'env': A list of dictionaries with 'name' and 'value' keys.
+        - 'juju': A list of dictionaries with 'secret-id', 'name', and 'key' keys.
+        - 'vault': A list of dictionaries with 'path', 'name', and 'key' keys.
 
     Args:
         yaml_string: The YAML string to be parsed.
@@ -119,9 +128,9 @@ def parse_environment(yaml_string):
         dict: A dictionary with the parsed and validated secrets.
               The structure of the returned dictionary is:
               {
-                  "env": {str: str},
-                  "juju": [{"secret-id": str, "key": str}],
-                  "vault": [{"path": str, "key": str}]
+                  "env": [{"name": str, "value": str}],
+                  "juju": [{"secret-id": str, "name": str, "key": str}],
+                  "vault": [{"path": str, "name": str, "key": str}]
               }
 
     Raises:
@@ -139,35 +148,39 @@ def parse_environment(yaml_string):
 
     # Validate env key
     env = environment_key.get("env", [])
-    if not isinstance(env, list) or not all(isinstance(item, dict) and len(item) == 1 for item in env):
-        raise ValueError("Invalid environment structure: 'env' should be a list of single-key dictionaries")
+    if not isinstance(env, list) or not all(
+        isinstance(item, dict) and "name" in item and "value" in item and len(item) == 2 for item in env
+    ):
+        raise ValueError(
+            "Invalid environment structure: 'env' should be a list of dictionaries with 'name' and 'value'"
+        )
 
     # Validate juju key
     juju = environment_key.get("juju", [])
     if not isinstance(juju, list) or not all(
-        isinstance(item, dict) and "key" in item and (("secret-id" in item) and len(item) == 2) for item in juju
+        isinstance(item, dict) and "secret-id" in item and "name" in item and "key" in item and len(item) == 3
+        for item in juju
     ):
         raise ValueError(
-            "Invalid environment structure: 'juju' should be a list of dictionaries with 'key' and 'secret-id'"
+            "Invalid environment structure: 'juju' should be a list of dictionaries with 'secret-id', 'name', and 'key'"
         )
 
     # Validate vault key
     vault = environment_key.get("vault", [])
     if not isinstance(vault, list) or not all(
-        isinstance(item, dict) and "path" in item and "key" in item and len(item) == 2 for item in vault
+        isinstance(item, dict) and "path" in item and "name" in item and "key" in item and len(item) == 3
+        for item in vault
     ):
         raise ValueError(
-            "Invalid environment structure: 'vault' should be a list of dictionaries with 'path' and 'key'"
+            "Invalid environment structure: 'vault' should be a list of dictionaries with 'path', 'name', and 'key'"
         )
 
-    env = environment_key.get("env", [])
-    juju = environment_key.get("juju", [])
-    vault = environment_key.get("vault", [])
-
     parsed_data = {
-        "env": {list(item.keys())[0]: list(item.values())[0] for item in env},
-        "juju": [{"secret-id": item.get("secret-id"), "key": item.get("key")} for item in juju],
-        "vault": [{"path": item.get("path"), "key": item.get("key")} for item in vault],
+        "env": [{"name": item.get("name"), "value": item.get("value")} for item in env],
+        "juju": [
+            {"secret-id": item.get("secret-id"), "name": item.get("name"), "key": item.get("key")} for item in juju
+        ],
+        "vault": [{"path": item.get("path"), "name": item.get("name"), "key": item.get("key")} for item in vault],
     }
 
     return parsed_data

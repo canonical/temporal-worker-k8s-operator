@@ -11,7 +11,7 @@ from temporalio import activity
 async def vault_test(arg: ComposeGreetingInput) -> str:
     activity.logger.info("Running activity with parameter %s" % arg)
 
-    sensitive1 = os.getenv("vault-secret1")
-    sensitive2 = os.getenv("vault-secret2")
+    sensitive1 = os.getenv("vault-key1")
+    sensitive2 = os.getenv("vault-key2")
     
     return f"{sensitive1} {sensitive2}"

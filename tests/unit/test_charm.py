@@ -150,7 +150,9 @@ class TestCharm(TestCase):
         harness.update_config({"environment": invalid_environment_config_env})
         self.assertEqual(
             harness.model.unit.status,
-            BlockedStatus("Invalid environment structure: 'env' should be a list of single-key dictionaries"),
+            BlockedStatus(
+                "Invalid environment structure: 'env' should be a list of dictionaries with 'name' and 'value'"
+            ),
         )
 
         invalid_environment_config_juju = dedent(
@@ -166,7 +168,7 @@ class TestCharm(TestCase):
         self.assertEqual(
             harness.model.unit.status,
             BlockedStatus(
-                "Invalid environment structure: 'juju' should be a list of dictionaries with 'key' and 'secret-id'"
+                "Invalid environment structure: 'juju' should be a list of dictionaries with 'secret-id', 'name', and 'key'"
             ),
         )
 
@@ -183,7 +185,7 @@ class TestCharm(TestCase):
         self.assertEqual(
             harness.model.unit.status,
             BlockedStatus(
-                "Invalid environment structure: 'vault' should be a list of dictionaries with 'path' and 'key'"
+                "Invalid environment structure: 'vault' should be a list of dictionaries with 'path', 'name', and 'key'"
             ),
         )
 
@@ -213,23 +215,28 @@ class TestCharm(TestCase):
         add_vault_relation(self, harness)
         self.harness.update_config({})
 
-        secret_config = dedent(
+        environment_config = dedent(
             f"""
         environment:
             env:
-                - hello: world
-                - test: variable
+                - name: hello
+                  value: world
+                - name: test
+                  value: variable
             juju:
                 - secret-id: {secret_id}
-                  key: sensitive1
+                  name: sensitive1
+                  key: key1
                 - secret-id: {secret_id}
-                  key: sensitive2
+                  name: sensitive2
+                  key: key2
             vault:
                 - path: secrets
+                  name: access_token
                   key: token
         """
         )
-        harness.update_config({"environment": secret_config})
+        harness.update_config({"environment": environment_config})
 
         want_plan = {
             "services": {
@@ -246,7 +253,7 @@ class TestCharm(TestCase):
                             "test": "variable",
                             "sensitive1": "hello",
                             "sensitive2": "world",
-                            "token": "token_secret",
+                            "access_token": "token_secret",
                         },
                     },
                 }
@@ -318,7 +325,7 @@ def simulate_lifecycle(harness, config):
 
     secret_id = harness.add_model_secret(
         "temporal-worker-k8s",
-        {"sensitive1": "hello", "sensitive2": "world"},
+        {"key1": "hello", "key2": "world"},
     )
 
     return secret_id
