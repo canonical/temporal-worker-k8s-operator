@@ -12,7 +12,7 @@ import secrets
 
 import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
-from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
+from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.vault_k8s.v0 import vault_kv
 from ops import main, pebble
@@ -21,7 +21,6 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 
 import environment_processors
 from literals import (
-    LOG_FILE,
     PROMETHEUS_PORT,
     REQUIRED_CANDID_CONFIG,
     REQUIRED_CHARM_CONFIG,
@@ -74,7 +73,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         )
 
         # Loki
-        self._log_proxy = LogProxyConsumer(self, log_files=[LOG_FILE], relation_name="log-proxy")
+        self._log_forwarder = LogForwarder(self, relation_name="logging")
 
         # Grafana
         self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
