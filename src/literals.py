@@ -6,7 +6,6 @@
 """Literals used by the Temporal Worker K8s charm."""
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
-LOG_FILE = "/var/log/temporal"
 
 REQUIRED_CHARM_CONFIG = ["host", "namespace", "queue"]
 REQUIRED_CANDID_CONFIG = ["candid-url", "candid-username", "candid-public-key", "candid-private-key"]

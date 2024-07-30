@@ -53,7 +53,7 @@ provides:
     interface: grafana_dashboard
 
 requires:
-  log-proxy:
+  logging:
     interface: loki_push_api
     limit: 1
   vault:

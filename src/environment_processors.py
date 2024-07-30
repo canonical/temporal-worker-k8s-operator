@@ -138,16 +138,8 @@ def parse_environment(yaml_string):
     """
     data = yaml.safe_load(yaml_string)
 
-    # Validate the main structure
-    if not isinstance(data, dict) or "environment" not in data:
-        raise ValueError("Invalid environment structure: 'environment' key not found")
-
-    environment_key = data["environment"]
-    if not isinstance(environment_key, dict):
-        raise ValueError("Invalid environment structure: 'environment' should be a dictionary")
-
     # Validate env key
-    env = environment_key.get("env", [])
+    env = data.get("env", [])
     if not isinstance(env, list) or not all(
         isinstance(item, dict) and "name" in item and "value" in item and len(item) == 2 for item in env
     ):
@@ -156,7 +148,7 @@ def parse_environment(yaml_string):
         )
 
     # Validate juju key
-    juju = environment_key.get("juju", [])
+    juju = data.get("juju", [])
     if not isinstance(juju, list) or not all(
         isinstance(item, dict) and "secret-id" in item and "name" in item and "key" in item and len(item) == 3
         for item in juju
@@ -166,7 +158,7 @@ def parse_environment(yaml_string):
         )
 
     # Validate vault key
-    vault = environment_key.get("vault", [])
+    vault = data.get("vault", [])
     if not isinstance(vault, list) or not all(
         isinstance(item, dict) and "path" in item and "name" in item and "key" in item and len(item) == 3
         for item in vault

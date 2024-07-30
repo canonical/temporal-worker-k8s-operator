@@ -16,3 +16,4 @@ parts:
   charm:
     charm-binary-python-packages:
       - hvac==2.3.0
+      - cosl==0.0.6

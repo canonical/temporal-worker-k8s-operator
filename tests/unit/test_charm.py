@@ -139,7 +139,6 @@ class TestCharm(TestCase):
         harness.charm.on.config_changed.emit()
         invalid_environment_config_env = dedent(
             """
-        environment:
             env:
               - hello: world
                 wrong: key
@@ -157,7 +156,6 @@ class TestCharm(TestCase):
 
         invalid_environment_config_juju = dedent(
             """
-        environment:
             juju:
               - wrong: key
                 key: hello
@@ -174,7 +172,6 @@ class TestCharm(TestCase):
 
         invalid_environment_config_vault = dedent(
             """
-        environment:
             vault:
               - path: path
                 value: wrong
@@ -217,7 +214,6 @@ class TestCharm(TestCase):
 
         environment_config = dedent(
             f"""
-        environment:
             env:
                 - name: hello
                   value: world
