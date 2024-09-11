@@ -17,4 +17,4 @@ parts:
     charm-binary-python-packages:
       - hvac==2.3.0
       - cosl==0.0.6
-    build-packages: [rustc, pkg-config, libffi-dev, libssl-dev]
+    build-packages: [cargo, rustc, pkg-config, libffi-dev, libssl-dev]
