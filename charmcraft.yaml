@@ -7,14 +7,14 @@
 type: charm
 bases:
   - build-on:
-    - name: ubuntu
-      channel: "22.04"
+      - name: ubuntu
+        channel: "22.04"
     run-on:
-    - name: ubuntu
-      channel: "22.04"
+      - name: ubuntu
+        channel: "22.04"
 parts:
   charm:
     charm-binary-python-packages:
       - hvac==2.3.0
       - cosl==0.0.6
-    build-packages: [cargo, rustc, pkg-config, libffi-dev, libssl-dev]
+    build-packages: [rustc, pkg-config, libffi-dev, libssl-dev]
