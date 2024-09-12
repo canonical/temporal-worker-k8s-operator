@@ -4,3 +4,6 @@ CVE-2024-27308
 # TODO (kelkawi-a): remove these once Temporal pushes the latest SDK build to pip
 CVE-2024-32650
 CVE-2024-24790
+CVE-2024-45311
+# TODO (onurmus): remove once Go is updated: https://warthogs.atlassian.net/browse/FR-8847
+CVE-2024-34156

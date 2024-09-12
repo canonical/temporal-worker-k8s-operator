@@ -29,8 +29,14 @@ tox                      # runs 'format', 'lint', and 'unit' environments
 This charm is used to deploy Temporal server in a k8s cluster. For a local
 deployment, follow the following steps:
 
+    # Install Docker
+    sudo addgroup --system docker
+    sudo adduser $USER docker
+    newgrp docker
+    sudo snap install docker
+
     # Install Microk8s from snap:
-    sudo snap install microk8s --classic --channel=1.24
+    sudo snap install microk8s --channel 1.25-strict/stable
 
     # Install charmcraft from snap:
     sudo snap install charmcraft --classic
@@ -48,7 +54,7 @@ deployment, follow the following steps:
     newgrp microk8s
 
     # Enable the necessary Microk8s addons:
-    microk8s enable hostpath-storage dns registry
+    sudo microk8s enable hostpath-storage dns registry
 
     # Install the Juju CLI client, juju:
     sudo snap install juju --classic

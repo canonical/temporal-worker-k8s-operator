@@ -1,2 +1,3 @@
 ops==2.15.0
 pytest-interface-tester==2.0.1
+ops-scenario==6.1.7

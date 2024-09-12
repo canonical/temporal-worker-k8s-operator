@@ -76,11 +76,8 @@ build: ## Create a Python source distribution and a wheel in dist
 .PHONY: build_rock
 build_rock:
 	rockcraft pack
-	rockcraft.skopeo --insecure-policy copy oci-archive:$(ROCK_NAME) docker-daemon:$(IMAGE_NAME)
-	IMAGE_ID=$$(docker inspect --format='{{.Id}}' $(IMAGE_NAME)); \
-	docker tag $$IMAGE_ID localhost:32000/$(IMAGE_NAME)
-	docker push localhost:32000/$(IMAGE_NAME)
-
+	rockcraft.skopeo --insecure-policy copy --dest-tls-verify=false oci-archive:$(ROCK_NAME) docker://localhost:32000/$(IMAGE_NAME)
+	
 .PHONY: publish
 publish: ## Publish the package to PYPI
 	$(POETRY) publish
