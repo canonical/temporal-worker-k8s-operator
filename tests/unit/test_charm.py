@@ -219,6 +219,14 @@ class TestCharm(TestCase):
                   value: world
                 - name: test
                   value: variable
+                - name: test_nested
+                  value:
+                    - connection_id: my_connection_id
+                      unnesting:
+                        tables:
+                          table1: [col1, col2]
+                          table2: [col3]
+                      redaction:
             juju:
                 - secret-id: {secret_id}
                   name: sensitive1
@@ -250,6 +258,7 @@ class TestCharm(TestCase):
                             "sensitive1": "hello",
                             "sensitive2": "world",
                             "access_token": "token_secret",
+                            "test_nested": '[{"connection_id": "my_connection_id", "unnesting": {"tables": {"table1": ["col1", "col2"], "table2": ["col3"]}}, "redaction": null}]',
                         },
                     },
                 }
@@ -257,7 +266,7 @@ class TestCharm(TestCase):
         }
 
         got_plan = harness.get_container_pebble_plan("temporal-worker").to_dict()
-        self.assertEqual(got_plan, want_plan)
+        self.assertDictEqual(got_plan, want_plan)
 
 
 def add_vault_relation(test, harness):
