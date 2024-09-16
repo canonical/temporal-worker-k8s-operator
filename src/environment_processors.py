@@ -27,7 +27,7 @@ def process_env_variables(parsed_environment_data):
     for env_variable in env_variables:
         key_name = env_variable.get("name")
         key_value = env_variable.get("value")
-        if isinstance(key_value, dict) or isinstance(key_value, list):
+        if isinstance(key_value, (dict, list)):
             charm_env.update({key_name: json.dumps(key_value)})
         else:
             charm_env.update({key_name: key_value})
