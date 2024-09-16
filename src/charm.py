@@ -254,9 +254,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             return
 
         context = {}
-        context.update(
-            {convert_env_var(key): value for key, value in self.config.items() if key not in ["environment"]}
-        )
         try:
             self._validate(event)
             environment_config = self.config.get("environment")
@@ -280,6 +277,9 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             if value:
                 context.update({key: value})
 
+        context.update(
+            {convert_env_var(key): value for key, value in self.config.items() if key not in ["environment"]}
+        )
         context.update({"TWC_PROMETHEUS_PORT": PROMETHEUS_PORT})
 
         pebble_layer = {
