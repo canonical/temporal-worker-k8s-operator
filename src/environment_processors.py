@@ -113,6 +113,10 @@ def process_vault_variables(charm, parsed_environment_data):
                 raise ValueError(f"Unable to read vault secret `{from_key}` at path `{path}`: {e}") from e
             charm_env.update({key_name: secret})
 
+    for key in charm_env:
+        if key.startswith("TEMPORAL_") or key.startswith("TWC_"):
+            raise ValueError("Environment variables cannot use reserved prefix 'TEMPORAL_' or 'TWC_'")
+
     return charm_env
 
 

@@ -21,4 +21,5 @@ class TestDeployment:
 
     async def test_basic_client(self, ops_test: OpsTest):
         """Connects a client and runs a basic Temporal workflow."""
-        await run_sample_workflow(ops_test)
+        await run_sample_workflow(ops_test, use_env_variables=False)
+        await run_sample_workflow(ops_test, use_env_variables=True)
