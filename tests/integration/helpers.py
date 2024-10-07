@@ -6,6 +6,7 @@
 
 import asyncio
 import logging
+import os
 import time
 from datetime import timedelta
 from pathlib import Path
@@ -133,19 +134,26 @@ def unseal_vault(client, endpoint: str, root_token: str, unseal_key: str):
     client.sys.submit_unseal_key(unseal_key)
 
 
-async def run_sample_workflow(ops_test: OpsTest, workflow_type=None):
+async def run_sample_workflow(ops_test: OpsTest, workflow_type=None, use_env_variables=False):
     """Connect to a client and runs a basic Temporal workflow.
 
     Args:
         ops_test: PyTest object.
         workflow_type: set to "vault" to test Vault workflow.
+        use_env_variables: whether to initialize Temporal client using environment variables or declared parameters.
     """
     url = await get_application_url(ops_test, application=APP_NAME_SERVER, port=7233)
     logger.info("running workflow on app address: %s", url)
 
-    client = await Client.connect(
-        Options(host=url, queue=BASE_WORKER_CONFIG["queue"], namespace=BASE_WORKER_CONFIG["namespace"])
-    )
+    if use_env_variables:
+        os.environ["TEMPORAL_HOST"] = url
+        os.environ["TEMPORAL_NAMESPACE"] = BASE_WORKER_CONFIG["namespace"]
+        os.environ["TEMPORAL_QUEUE"] = BASE_WORKER_CONFIG["queue"]
+        client = await Client.connect(Options())
+    else:
+        client = await Client.connect(
+            Options(host=url, queue=BASE_WORKER_CONFIG["queue"], namespace=BASE_WORKER_CONFIG["namespace"])
+        )
 
     workflow_name = "GreetingWorkflow"
     if workflow_type == "vault":

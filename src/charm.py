@@ -278,9 +278,22 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 context.update({key: value})
 
         context.update(
-            {convert_env_var(key): value for key, value in self.config.items() if key not in ["environment"]}
+            {
+                convert_env_var(key, prefix="TWC_"): value
+                for key, value in self.config.items()
+                if key not in ["environment"]
+            }
         )
-        context.update({"TWC_PROMETHEUS_PORT": PROMETHEUS_PORT})
+
+        context.update(
+            {
+                convert_env_var(key, prefix="TEMPORAL_"): value
+                for key, value in self.config.items()
+                if key not in ["environment"]
+            }
+        )
+
+        context.update({"TWC_PROMETHEUS_PORT": PROMETHEUS_PORT, "TEMPORAL_PROMETHEUS_PORT": PROMETHEUS_PORT})
 
         pebble_layer = {
             "summary": "temporal worker layer",
