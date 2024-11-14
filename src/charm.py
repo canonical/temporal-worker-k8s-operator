@@ -54,6 +54,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self.framework.observe(self.on.restart_action, self._on_restart)
         self.framework.observe(self.on.update_status, self._on_update_status)
         self.framework.observe(self.on.install, self._on_install)
+        self.framework.observe(self.on.secret_changed, self._on_secret_changed)
 
         # Vault
         self.vault = vault_kv.VaultKvRequires(
@@ -129,6 +130,15 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             event: The event triggered when the relation changed.
         """
         self.unit.status = WaitingStatus("configuring temporal worker")
+        self._update(event)
+
+    @log_event_handler(logger)
+    def _on_secret_changed(self, event):
+        """Handle secret changed hook.
+
+        Args:
+            event: The event triggered when the secret changed.
+        """
         self._update(event)
 
     @log_event_handler(logger)
