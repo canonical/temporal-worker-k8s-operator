@@ -1,0 +1,3 @@
+rules:
+  # Ignore "master" - the database relation event received from the library.
+  - name: master

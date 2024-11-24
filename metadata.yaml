@@ -60,3 +60,7 @@ requires:
     interface: vault-kv
     optional: true
     limit: 1
+  database:
+    interface: database
+    optional: true
+    limit: 1

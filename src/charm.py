@@ -11,6 +11,7 @@ import os
 import secrets
 
 import yaml
+from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
@@ -21,6 +22,7 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 
 import environment_processors
 from literals import (
+    DB_NAME,
     PROMETHEUS_PORT,
     REQUIRED_CANDID_CONFIG,
     REQUIRED_CHARM_CONFIG,
@@ -29,6 +31,7 @@ from literals import (
     VALID_LOG_LEVELS,
 )
 from log import log_event_handler
+from relations.postgresql import Postgresql
 from relations.vault import VAULT_NONCE_SECRET_LABEL, VaultRelation
 from state import State
 from vault.actions import VaultActions
@@ -48,6 +51,9 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         super().__init__(*args)
         self._state = State(self.app, lambda: self.model.get_relation("peer"))
         self.name = "temporal-worker"
+
+        self.database = DatabaseRequires(self, relation_name="database", database_name=DB_NAME)
+        self.postgresql = Postgresql(self)
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.temporal_worker_pebble_ready, self._on_temporal_worker_pebble_ready)
@@ -148,6 +154,12 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         Args:
             event: The `update-status` event triggered at intervals.
         """
+        should_update = self.postgresql.update_db_relation_data_in_state(event)
+        if should_update:
+            logger.info("updating charm to reflect new database connection info")
+            self._update(event)
+            return
+
         try:
             self._validate(event)
             environment_config = self.config.get("environment")
@@ -304,6 +316,18 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         )
 
         context.update({"TWC_PROMETHEUS_PORT": PROMETHEUS_PORT, "TEMPORAL_PROMETHEUS_PORT": PROMETHEUS_PORT})
+
+        if self.model.get_relation("database"):
+            context.update(
+                {
+                    "TEMPORAL_DB_NAME": self.charm._state.database_connection.get("dbname"),
+                    "TEMPORAL_DB_HOST": self.charm._state.database_connection.get("host"),
+                    "TEMPORAL_DB_PORT": self.charm._state.database_connection.get("port"),
+                    "TEMPORAL_DB_PASSWORD": self.charm._state.database_connection.get("password"),
+                    "TEMPORAL_DB_USER": self.charm._state.database_connection.get("user"),
+                    "TEMPORAL_DB_TLS": self.charm._state.database_connection.get("tls"),
+                }
+            )
 
         pebble_layer = {
             "summary": "temporal worker layer",
