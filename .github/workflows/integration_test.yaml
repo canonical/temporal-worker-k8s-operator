@@ -13,7 +13,7 @@ jobs:
     secrets: inherit
     with:
       channel: 1.25-strict/stable
-      modules: '["test_charm.py", "test_scaling.py", "test_vault.py"]'
+      modules: '["test_charm.py", "test_scaling.py", "test_vault.py", "test_postgres_db.py"]'
       juju-channel: 3.4/stable
       self-hosted-runner: false
       microk8s-addons: "dns ingress rbac storage metallb:10.15.119.2-10.15.119.4 registry"
