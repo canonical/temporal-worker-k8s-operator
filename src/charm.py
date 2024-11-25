@@ -320,12 +320,12 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if self.model.get_relation("database"):
             context.update(
                 {
-                    "TEMPORAL_DB_NAME": self.charm._state.database_connection.get("dbname"),
-                    "TEMPORAL_DB_HOST": self.charm._state.database_connection.get("host"),
-                    "TEMPORAL_DB_PORT": self.charm._state.database_connection.get("port"),
-                    "TEMPORAL_DB_PASSWORD": self.charm._state.database_connection.get("password"),
-                    "TEMPORAL_DB_USER": self.charm._state.database_connection.get("user"),
-                    "TEMPORAL_DB_TLS": self.charm._state.database_connection.get("tls"),
+                    "TEMPORAL_DB_NAME": self._state.database_connection.get("dbname"),
+                    "TEMPORAL_DB_HOST": self._state.database_connection.get("host"),
+                    "TEMPORAL_DB_PORT": self._state.database_connection.get("port"),
+                    "TEMPORAL_DB_PASSWORD": self._state.database_connection.get("password"),
+                    "TEMPORAL_DB_USER": self._state.database_connection.get("user"),
+                    "TEMPORAL_DB_TLS": self._state.database_connection.get("tls"),
                 }
             )
 

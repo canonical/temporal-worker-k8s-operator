@@ -84,7 +84,6 @@ class Postgresql(framework.Object):
             event.defer()
             return False
 
-        should_update = False
         if self.charm.model.get_relation("database") is None:
             return False
 
@@ -111,6 +110,7 @@ class Postgresql(framework.Object):
         if None in (db_conn["user"], db_conn["password"]):
             return False
 
+        should_update = False
         fields_to_check = ["host", "user", "password", "tls"]
         database_connection = self.charm._state.database_connection or {}
         if any(database_connection.get(field, "") != db_conn[field] for field in fields_to_check):
