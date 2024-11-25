@@ -259,6 +259,32 @@ compatibility issues with some versions of Juju (e.g. Juju `v3.2.4`). It has
 been tested successfully with Juju
 [`v3.3.5`](https://github.com/canonical/temporal-worker-k8s-operator/actions/runs/9874524137/job/27269330380).
 
+## PostgreSQL
+
+The Charmed Temporal Worker can be related to the
+[PostgreSQL operator charm](https://charmhub.io/postgresql-k8s) to enable the
+creation of a database to be used by your workflows. To enable this, run the
+following commands:
+
+```bash
+juju deploy postgresql-k8s --channel 14/stable --trust
+juju relate temporal-worker-k8s postgresql-k8s
+```
+
+Once this is done and all units are settled and active, you can refer to the
+database credentials within your workflow code using the following environment
+variables:
+
+- `TEMPORAL_DB_NAME`
+- `TEMPORAL_DB_HOST`
+- `TEMPORAL_DB_PORT`
+- `TEMPORAL_DB_USER`
+- `TEMPORAL_DB_PASSWORD`
+- `TEMPORAL_DB_TLS`
+
+An example of this can be found in the
+[`db_activity`](./resource_sample_py/resource_sample/activities/db_activity.py).
+
 ## Contributing
 
 This charm is still in active development. Please see the
