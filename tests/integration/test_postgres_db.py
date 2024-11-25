@@ -23,16 +23,7 @@ class TestDeployment:
         """Test Postgresql relation."""
         await scale(ops_test, app=APP_NAME, units=2)
 
-        await ops_test.model.deploy("postgresql-k8s", channel="14/stable", trust=True)
-
         async with ops_test.fast_forward():
-            await ops_test.model.wait_for_idle(
-                apps=["postgresql-k8s"],
-                status="active",
-                raise_on_blocked=False,
-                timeout=600,
-            )
-
             logger.info("relating temporal-worker-k8s to postgresql-k8s charms")
             await ops_test.model.integrate(APP_NAME, "postgresql-k8s")
 
