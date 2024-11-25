@@ -39,7 +39,7 @@ async def database_test(arg: ComposeGreetingInput) -> str:
         table=sql.Identifier(table_name)
     )
     cursor.execute(insert_query, ("hello world", 123))
-    inserted_id = cursor.fetchone()[0]
+    inserted_id = cursor.fetchone()["id"]
     conn.commit()
     
     # Read the record back
