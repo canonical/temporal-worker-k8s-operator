@@ -11,6 +11,7 @@ import os
 
 from activities.activity1 import compose_greeting
 from activities.activity2 import vault_test
+from activities.db_activity import database_test
 from temporalio.runtime import PrometheusConfig, Runtime, TelemetryConfig
 from temporallib.auth import (
     AuthOptions,
@@ -21,7 +22,7 @@ from temporallib.auth import (
 from temporallib.client import Client, Options
 from temporallib.encryption import EncryptionOptions
 from temporallib.worker import SentryOptions, Worker, WorkerOptions
-from workflows.workflow1 import GreetingWorkflow, VaultWorkflow
+from workflows.workflow1 import GreetingWorkflow, VaultWorkflow, DatabaseWorkflow
 
 logger = logging.getLogger(__name__)
 
@@ -118,8 +119,8 @@ async def run_worker():
     worker = Worker(
         client=client,
         task_queue=os.getenv("TWC_QUEUE"),
-        workflows=[GreetingWorkflow, VaultWorkflow],
-        activities=[compose_greeting, vault_test],
+        workflows=[GreetingWorkflow, VaultWorkflow, DatabaseWorkflow],
+        activities=[compose_greeting, vault_test, database_test],
         worker_opt=worker_opt,
     )
 
