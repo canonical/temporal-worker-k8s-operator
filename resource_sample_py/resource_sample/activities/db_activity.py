@@ -6,6 +6,7 @@ import os
 import psycopg2
 from psycopg2 import sql
 from common.messages import ComposeGreetingInput
+from psycopg2.extras import RealDictCursor
 
 
 @activity.defn(name="database_test")
@@ -18,7 +19,7 @@ async def database_test(arg: ComposeGreetingInput) -> str:
         "port": os.getenv("TEMPORAL_DB_PORT")
     }
     conn = psycopg2.connect(**db_config)
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
     
     # Create test table
     table_name = "test_table"
@@ -37,7 +38,7 @@ async def database_test(arg: ComposeGreetingInput) -> str:
     insert_query = sql.SQL("INSERT INTO {table} (name, value) VALUES (%s, %s) RETURNING id").format(
         table=sql.Identifier(table_name)
     )
-    cursor.execute(insert_query, ("example_name", 123))
+    cursor.execute(insert_query, ("hello world", 123))
     inserted_id = cursor.fetchone()[0]
     conn.commit()
     
@@ -54,4 +55,4 @@ async def database_test(arg: ComposeGreetingInput) -> str:
     if conn:
         conn.close()
 
-    return record
+    return record["name"]

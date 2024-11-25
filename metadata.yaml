@@ -61,6 +61,6 @@ requires:
     optional: true
     limit: 1
   database:
-    interface: database
+    interface: postgresql_client
     optional: true
     limit: 1
