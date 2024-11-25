@@ -8,7 +8,6 @@ import logging
 from ops import framework
 from ops.model import WaitingStatus
 
-from literals import DB_NAME
 from log import log_event_handler
 
 logger = logging.getLogger(__name__)
@@ -99,7 +98,6 @@ class Postgresql(framework.Object):
             return False
 
         db_conn = {
-            "dbname": DB_NAME,
             "host": primary_endpoint[0],
             "port": primary_endpoint[1],
             "password": relation_data.get("password"),

@@ -22,7 +22,6 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 
 import environment_processors
 from literals import (
-    DB_NAME,
     PROMETHEUS_PORT,
     REQUIRED_CANDID_CONFIG,
     REQUIRED_CHARM_CONFIG,
@@ -52,7 +51,9 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self._state = State(self.app, lambda: self.model.get_relation("peer"))
         self.name = "temporal-worker"
 
-        self.database = DatabaseRequires(self, relation_name="database", database_name=DB_NAME)
+        self.database = DatabaseRequires(
+            self, relation_name="database", database_name=self.model.config.get("db-name", None)
+        )
         self.postgresql = Postgresql(self)
 
         self.framework.observe(self.on.config_changed, self._on_config_changed)
@@ -263,6 +264,9 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             except (yaml.parser.ParserError, yaml.scanner.ScannerError) as e:
                 raise ValueError(f"Incorrectly formatted `environment` config: {e}") from e
 
+        if self.model.get_relation("database") and not self.config.get("db-name"):
+            raise ValueError("Invalid config: db name value missing")
+
     def _update(self, event):  # noqa: C901
         """Update the Temporal worker configuration and replan its execution.
 
@@ -320,7 +324,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if self.model.get_relation("database"):
             context.update(
                 {
-                    "TEMPORAL_DB_NAME": self._state.database_connection.get("dbname"),
                     "TEMPORAL_DB_HOST": self._state.database_connection.get("host"),
                     "TEMPORAL_DB_PORT": self._state.database_connection.get("port"),
                     "TEMPORAL_DB_PASSWORD": self._state.database_connection.get("password"),

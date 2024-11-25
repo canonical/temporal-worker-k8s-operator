@@ -147,6 +147,11 @@ options:
     default: ""
     type: string
 
+  db-name:
+    description: Name of the database created when relating to a database charm.
+    default: ""
+    type: string
+
   environment:
     description: |
       This configuration is used to manage and retrieve sensitive information required 

@@ -23,5 +23,3 @@ REQUIRED_OIDC_CONFIG = [
 ]
 SUPPORTED_AUTH_PROVIDERS = ["candid", "google"]
 PROMETHEUS_PORT = 9000
-
-DB_NAME = "temporal-worker-k8s_db"
