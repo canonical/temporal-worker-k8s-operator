@@ -34,7 +34,7 @@ class TestDeployment:
         """Test Vault relation."""
         await scale(ops_test, app=APP_NAME, units=2)
 
-        await ops_test.model.deploy("vault-k8s", channel="1.16/stable", revision=280)
+        await ops_test.model.deploy("vault-k8s", channel="1.16/edge")
 
         async with ops_test.fast_forward():
             await ops_test.model.wait_for_idle(
@@ -45,12 +45,14 @@ class TestDeployment:
             )
 
             # Initialize vault
+            logger.info("initializing vault-k8s charm")
             vault_url = await get_unit_url(ops_test, "vault-k8s", 0, 8200, "https")
             client = hvac.Client(url=vault_url, verify=False)
             initialize_response = client.sys.initialize(secret_shares=1, secret_threshold=1)
             root_token, unseal_key = initialize_response["root_token"], initialize_response["keys"][0]
             unseal_vault(client, vault_url, root_token, unseal_key)
 
+            logger.info("waiting for vault-k8s charm to go into blocked state")
             await wait_for_status_message(
                 application="vault-k8s",
                 ops_test=ops_test,
@@ -58,6 +60,7 @@ class TestDeployment:
                 expected_message="Please authorize charm (see `authorize-charm` action)",
             )
 
+            logger.info("authorizing vault-k8s charm")
             await authorize_charm(ops_test, root_token)
             await ops_test.model.wait_for_idle(
                 apps=["vault-k8s"],
