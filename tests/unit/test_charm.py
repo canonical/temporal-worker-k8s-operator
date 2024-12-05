@@ -13,7 +13,13 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 from ops.testing import Harness
 
 from charm import TemporalWorkerK8SOperatorCharm
-from tests.unit.literals import CONFIG, CONTAINER_NAME, VAULT_CONFIG, WANT_ENV
+from tests.unit.literals import (
+    CONFIG,
+    CONTAINER_NAME,
+    DATABASE_CONFIG,
+    VAULT_CONFIG,
+    WANT_ENV,
+)
 
 
 class TestCharm(TestCase):
@@ -268,6 +274,64 @@ class TestCharm(TestCase):
         got_plan = harness.get_container_pebble_plan("temporal-worker").to_dict()
         self.assertDictEqual(got_plan, want_plan)
 
+    def test_blocked_on_missing_db_name(self):
+        """The charm is blocked on missing db name with database relation."""
+        harness = self.harness
+
+        # Simulate peer relation readiness.
+        simulate_lifecycle(harness, CONFIG)
+        harness.charm.on.config_changed.emit()
+
+        # Simulate db readiness.
+        simulate_db_relation(harness)
+
+        self.assertEqual(harness.model.unit.status, BlockedStatus("Invalid config: db name value missing"))
+
+    def test_db_relation(self):
+        """The charm is ready with database relation."""
+        harness = self.harness
+        db_name = "temporal-worker-k8s_db"
+
+        # Simulate peer relation readiness.
+        simulate_lifecycle(harness, CONFIG)
+        harness.update_config({"db-name": db_name})
+        harness.charm.on.config_changed.emit()
+
+        # Simulate db readiness.
+        simulate_db_relation(harness)
+
+        # The plan is generated after pebble is ready.
+        want_plan = {
+            "services": {
+                "temporal-worker": {
+                    "summary": "temporal worker",
+                    "command": "./app/scripts/start-worker.sh",
+                    "startup": "enabled",
+                    "override": "replace",
+                    "environment": {
+                        **WANT_ENV,
+                        **DATABASE_CONFIG,
+                        "TEMPORAL_DB_NAME": db_name,
+                        "TWC_DB_NAME": db_name,
+                    },
+                }
+            },
+        }
+        got_plan = harness.get_container_pebble_plan("temporal-worker").to_dict()
+        self.assertEqual(got_plan, want_plan)
+
+        # The service was started.
+        service = harness.model.unit.get_container(CONTAINER_NAME).get_service("temporal-worker")
+        self.assertTrue(service.is_running())
+
+        self.assertEqual(harness.model.unit.status, MaintenanceStatus("replanning application"))
+        harness.charm.on.update_status.emit()
+
+        self.assertEqual(
+            harness.model.unit.status,
+            ActiveStatus(f"worker listening to namespace {CONFIG['namespace']!r} on queue {CONFIG['queue']!r}"),
+        )
+
 
 def add_vault_relation(test, harness):
     """Add vault relation to harness.
@@ -334,3 +398,31 @@ def simulate_lifecycle(harness, config):
     )
 
     return secret_id
+
+
+def simulate_db_relation(harness):
+    """Simulate a db relation with the postgresql charm.
+
+    Args:
+        harness: ops.testing.Harness object used to simulate charm lifecycle.
+
+    Returns:
+        DB relation ID.
+    """
+    db_relation_id = harness.add_relation("database", "postgresql")
+
+    relation_data = {
+        "database": "temporal-worker-k8s_db",
+        "endpoints": "myhost:5432,anotherhost:2345",
+        "password": "inner-light",
+        "username": "jean-luc",
+        "tls": "True",
+    }
+
+    harness.update_relation_data(
+        db_relation_id,
+        "postgresql",
+        relation_data,
+    )
+
+    return db_relation_id

@@ -6,6 +6,7 @@ import os
 from common.messages import ComposeGreetingInput
 from temporalio import activity
 
+
 # Basic activity that logs and does string concatenation
 @activity.defn(name="vault_test")
 async def vault_test(arg: ComposeGreetingInput) -> str:
@@ -13,5 +14,5 @@ async def vault_test(arg: ComposeGreetingInput) -> str:
 
     sensitive1 = os.getenv("vault-key1")
     sensitive2 = os.getenv("vault-key2")
-    
+
     return f"{sensitive1} {sensitive2}"

@@ -42,12 +42,21 @@ VAULT_CONFIG = {
     "vault_cert_path": "/vault/cert.pem",
 }
 
+DATABASE_CONFIG = {
+    "TEMPORAL_DB_HOST": "myhost",
+    "TEMPORAL_DB_PORT": "5432",
+    "TEMPORAL_DB_USER": "jean-luc",
+    "TEMPORAL_DB_PASSWORD": "inner-light",
+    "TEMPORAL_DB_TLS": "True",
+}
+
 WANT_ENV = {
     "TEMPORAL_AUTH_PROVIDER": "candid",
     "TEMPORAL_CANDID_PRIVATE_KEY": "test-private-key",
     "TEMPORAL_CANDID_PUBLIC_KEY": "test-public-key",
     "TEMPORAL_CANDID_URL": "test-url",
     "TEMPORAL_CANDID_USERNAME": "test-username",
+    "TEMPORAL_DB_NAME": "",
     "TEMPORAL_ENCRYPTION_KEY": "",
     "TEMPORAL_HOST": "test-host",
     "TEMPORAL_LOG_LEVEL": "debug",
@@ -76,6 +85,7 @@ WANT_ENV = {
     "TWC_CANDID_PUBLIC_KEY": "test-public-key",
     "TWC_CANDID_URL": "test-url",
     "TWC_CANDID_USERNAME": "test-username",
+    "TWC_DB_NAME": "",
     "TWC_ENCRYPTION_KEY": "",
     "TWC_HOST": "test-host",
     "TWC_LOG_LEVEL": "debug",

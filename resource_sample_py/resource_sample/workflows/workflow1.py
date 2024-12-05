@@ -8,7 +8,7 @@ from temporalio import workflow
 with workflow.unsafe.imports_passed_through():
     import activities.activity1 as all_activities1
     import activities.activity2 as all_activities2
-
+    import activities.db_activity as db_activity
 
 # Basic workflow that logs and invokes an activity
 @workflow.defn(name="GreetingWorkflow")
@@ -32,4 +32,16 @@ class VaultWorkflow:
             all_activities2.vault_test,
             all_activities1.ComposeGreetingInput("Hello", name),
             start_to_close_timeout=timedelta(seconds=10),
+        )
+
+
+@workflow.defn(name="DatabaseWorkflow")
+class DatabaseWorkflow:
+    @workflow.run
+    async def run(self, name: str) -> str:
+        workflow.logger.info("Running workflow with parameter %s" % name)
+        return await workflow.execute_activity(
+            db_activity.database_test,
+            all_activities1.ComposeGreetingInput("Hello", name),
+            start_to_close_timeout=timedelta(seconds=120),
         )
