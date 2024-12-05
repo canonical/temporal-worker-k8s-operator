@@ -34,6 +34,7 @@ class VaultWorkflow:
             start_to_close_timeout=timedelta(seconds=10),
         )
 
+
 @workflow.defn(name="DatabaseWorkflow")
 class DatabaseWorkflow:
     @workflow.run

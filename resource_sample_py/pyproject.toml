@@ -18,6 +18,7 @@ temporal-lib-py = "^1.8.0"
 python-json-logger = "^2.0.4"
 urllib3 = "^1.26.16"
 psycopg2 = "^2.9.10"
+pydantic-settings = "^2.4.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.1.3"

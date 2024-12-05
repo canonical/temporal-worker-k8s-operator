@@ -22,7 +22,7 @@ from temporallib.auth import (
 from temporallib.client import Client, Options
 from temporallib.encryption import EncryptionOptions
 from temporallib.worker import SentryOptions, Worker, WorkerOptions
-from workflows.workflow1 import GreetingWorkflow, VaultWorkflow, DatabaseWorkflow
+from workflows.workflow1 import DatabaseWorkflow, GreetingWorkflow, VaultWorkflow
 
 logger = logging.getLogger(__name__)
 
