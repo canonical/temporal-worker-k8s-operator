@@ -69,7 +69,15 @@ parts:
       - bash
       - libpq-dev
       - python3-dev
-
+  add-ca-certificates:
+    # This installs ca-certificates in the build env to populate our /etc/ssl/certs,
+    # then copies just the ca-certificates.crt to the final image
+    plugin: nil
+    build-packages: 
+      - ca-certificates
+    override-build: |-
+      mkdir -p $CRAFT_PART_INSTALL/etc/ssl/certs/
+      cp /etc/ssl/certs/ca-certificates.crt $CRAFT_PART_INSTALL/etc/ssl/certs/ca-certificates.crt
   worker-app:
     plugin: dump
     source: .
