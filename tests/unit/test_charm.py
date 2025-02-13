@@ -240,6 +240,12 @@ class TestCharm(TestCase):
                 - secret-id: {secret_id}
                   name: sensitive2
                   key: key2
+                - secret-id: {secret_id}
+                  name: TEMPORAL_ENCRYPTION_KEY
+                  key: encryption-key
+                - secret-id: {secret_id}
+                  name: TWC_SENTRY_DSN
+                  key: sentry-dns
             vault:
                 - path: secrets
                   name: access_token
@@ -247,7 +253,6 @@ class TestCharm(TestCase):
         """
         )
         harness.update_config({"environment": environment_config})
-
         want_plan = {
             "services": {
                 "temporal-worker": {
@@ -265,6 +270,8 @@ class TestCharm(TestCase):
                             "sensitive2": "world",
                             "access_token": "token_secret",
                             "test_nested": '[{"connection_id": "my_connection_id", "unnesting": {"tables": {"table1": ["col1", "col2"], "table2": ["col3"]}}, "redaction": null}]',
+                            "TEMPORAL_ENCRYPTION_KEY": "temporal-encryption-value",
+                            "TWC_SENTRY_DSN": "temporal-encryption-value",
                         },
                     },
                 }
@@ -394,7 +401,12 @@ def simulate_lifecycle(harness, config):
 
     secret_id = harness.add_model_secret(
         "temporal-worker-k8s",
-        {"key1": "hello", "key2": "world"},
+        {
+            "key1": "hello",
+            "key2": "world",
+            "encryption-key": "temporal-encryption-value",
+            "sentry-dns": "temporal-encryption-value",
+        },
     )
 
     return secret_id
