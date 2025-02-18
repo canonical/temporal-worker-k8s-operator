@@ -303,21 +303,18 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             if value:
                 context.update({key: value})
 
-        context.update(
-            {
-                convert_env_var(key, prefix="TWC_"): value
-                for key, value in self.config.items()
-                if key not in ["environment"]
-            }
-        )
+        for key, value in self.config.items():
+            if key in ["environment"]:
+                continue
 
-        context.update(
-            {
-                convert_env_var(key, prefix="TEMPORAL_"): value
-                for key, value in self.config.items()
-                if key not in ["environment"]
-            }
-        )
+            # Ignore environmental variables that have been overridden
+            # by vault or juju config options.
+            twc_env_var = convert_env_var(key, prefix="TWC_")
+            if not is_env_var_overridden(context, twc_env_var):
+                context.update({twc_env_var: value})
+            temporal_env_var = convert_env_var(key, prefix="TEMPORAL_")
+            if not is_env_var_overridden(context, temporal_env_var):
+                context.update({temporal_env_var: value})
 
         context.update({"TWC_PROMETHEUS_PORT": PROMETHEUS_PORT, "TEMPORAL_PROMETHEUS_PORT": PROMETHEUS_PORT})
 
@@ -363,6 +360,20 @@ def convert_env_var(config_var, prefix="TWC_"):
     """
     converted_env_var = config_var.upper().replace("-", "_")
     return prefix + converted_env_var
+
+
+def is_env_var_overridden(context, env_var):
+    """Check if env variable has already been overridden in context.
+
+    Args:
+        context: Containing variables from the environment file.
+        env_var: Environment variable to check for in context.
+
+    Returns:
+        True if an value matching the environmental variable is already
+            present in the context.
+    """
+    return env_var in context
 
 
 if __name__ == "__main__":  # pragma: nocover
