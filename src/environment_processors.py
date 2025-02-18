@@ -123,7 +123,7 @@ def process_vault_variables(charm, parsed_environment_data):
 def parse_environment(yaml_string):
     """Parse a YAML string containing environment variables and validates its structure.
 
-    The YAML string should contain an 'environment' key with nested 'env', 'juju', and 'vault' keys.
+    The YAML string may contain 'env', 'juju', and 'vault' keys as required.
     Each nested key should follow a specific structure:
         - 'env': A list of dictionaries with 'name' and 'value' keys.
         - 'juju': A list of dictionaries with 'secret-id', 'name', and 'key' keys.

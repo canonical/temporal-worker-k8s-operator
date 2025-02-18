@@ -171,31 +171,30 @@ options:
       Sample structure:
     
         ```yaml
-          environment:
-            env:
-              - name: key1
-                value: value1
-              - name: nested_example_key
-                value: 
-                  - connection_id: a_connection_id
-                    unnesting:
-                      tables:
-                        issues: ["test1", "test2"]
-                        users: [test3]
-                    redaction:
-            juju:
-              - secret-id: <secret_id>
-                name: sensitive1
-                key: key1
-              - secret-id: <secret_id>
-                name: sensitive2
-                key: key2
-            vault:
-              - path: my-secrets
-                name: sensitive1
-                key: key1
-              - path: my-secrets
-                name: sensitive2
-                key: key2
+          env:
+            - name: key1
+              value: value1
+            - name: nested_example_key
+              value: 
+                - connection_id: a_connection_id
+                  unnesting:
+                    tables:
+                      issues: ["test1", "test2"]
+                      users: [test3]
+                  redaction:
+          juju:
+            - secret-id: <secret_id>
+              name: sensitive1
+              key: key1
+            - secret-id: <secret_id>
+              name: sensitive2
+              key: key2
+          vault:
+            - path: my-secrets
+              name: sensitive1
+              key: key1
+            - path: my-secrets
+              name: sensitive2
+              key: key2
         ```
     type: string
