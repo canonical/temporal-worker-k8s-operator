@@ -107,7 +107,7 @@ secret and grant the charm access to it:
 ```bash
 juju add-secret my-secret key1=value1 key2=value2
 
-# Output: secret:<secret_id>
+# Output: secret:<secret_id1>
 
 juju grant-secret my-secret temporal-worker-k8s
 ```
@@ -118,12 +118,13 @@ The environment variables can then be configured into the charm as follows:
 
 ```yaml
 juju:
-  - secret-id: <secret_id>
+  - secret-id: <secret_id1>
     name: env_var1
     key: key1
-  - secret-id: <secret_id>
+  - secret-id: <secret_id1>
     name: env_var2
     key: key2
+  - secret-id: <secret_id2> # reads all keys from this secret
 ```
 
 #### Vault
