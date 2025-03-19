@@ -1,2 +1,2 @@
-# TODO (kelkawi-a): remove these once pebble CVE resolution propagates down the pipeline
-CVE-2024-45338
+# TODO (kelkawi-a): remove these once temporal propagates the fix to their SDK
+CVE-2025-29787
