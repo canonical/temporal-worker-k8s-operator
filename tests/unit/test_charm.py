@@ -151,7 +151,6 @@ class TestCharm(TestCase):
         """
         )
 
-        # with self.assertRaises(ValueError):
         harness.update_config({"environment": invalid_environment_config_env})
         self.assertEqual(
             harness.model.unit.status,
@@ -172,7 +171,7 @@ class TestCharm(TestCase):
         self.assertEqual(
             harness.model.unit.status,
             BlockedStatus(
-                "Invalid environment structure: 'juju' should be a list of dictionaries with 'secret-id', 'name', and 'key'"
+                "Invalid environment structure: each item in 'juju' must either contain only 'secret-id' or all of 'secret-id', 'name', and 'key'"
             ),
         )
 
@@ -213,8 +212,9 @@ class TestCharm(TestCase):
         mock_juju_version.has_secrets = True
         mock_from_environ.return_value = mock_juju_version
 
-        secret_id = simulate_lifecycle(harness, CONFIG)
-        secret_id = secret_id.split(":")[-1]
+        (secret_id1, secret_id2) = simulate_lifecycle(harness, CONFIG)
+        secret_id1 = secret_id1.split(":")[-1]
+        secret_id2 = secret_id2.split(":")[-1]
         add_vault_relation(self, harness)
         self.harness.update_config({})
 
@@ -234,12 +234,13 @@ class TestCharm(TestCase):
                           table2: [col3]
                       redaction:
             juju:
-                - secret-id: {secret_id}
+                - secret-id: {secret_id1}
                   name: sensitive1
                   key: key1
-                - secret-id: {secret_id}
+                - secret-id: {secret_id1}
                   name: sensitive2
                   key: key2
+                - secret-id: {secret_id2}
             vault:
                 - path: secrets
                   name: access_token
@@ -259,6 +260,8 @@ class TestCharm(TestCase):
                         **WANT_ENV,
                         # User added secrets through config
                         **{
+                            "ACCESS_TOKEN": "token",
+                            "CLIENT_SECRET": "secret",
                             "hello": "world",
                             "test": "variable",
                             "sensitive1": "hello",
@@ -392,12 +395,17 @@ def simulate_lifecycle(harness, config):
 
     harness.update_config(config)
 
-    secret_id = harness.add_model_secret(
+    secret_id1 = harness.add_model_secret(
         "temporal-worker-k8s",
         {"key1": "hello", "key2": "world"},
     )
 
-    return secret_id
+    secret_id2 = harness.add_model_secret(
+        "temporal-worker-k8s",
+        {"access-token": "token", "client-secret": "secret"},
+    )
+
+    return (secret_id1, secret_id2)
 
 
 def simulate_db_relation(harness):

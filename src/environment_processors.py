@@ -63,6 +63,12 @@ def process_juju_variables(charm, parsed_environment_data):
 
             secret = charm.model.get_secret(id=secret_id)
             secret_content = secret.get_content(refresh=True)
+
+            # Only secret-id is provided, read all keys and convert them to env variables
+            if not key_name and not from_key:
+                charm_env.update({key.upper().replace("-", "_"): value for key, value in secret_content.items()})
+                continue
+
             charm_env.update({key_name: secret_content[from_key]})
         except SecretNotFoundError as e:
             raise ValueError(f"Juju secret `{secret_id}` not found") from e
@@ -158,11 +164,12 @@ def parse_environment(yaml_string):
     # Validate juju key
     juju = data.get("juju", [])
     if not isinstance(juju, list) or not all(
-        isinstance(item, dict) and "secret-id" in item and "name" in item and "key" in item and len(item) == 3
+        isinstance(item, dict)
+        and ((set(item.keys()) == {"secret-id"}) or (set(item.keys()) == {"secret-id", "name", "key"}))
         for item in juju
     ):
         raise ValueError(
-            "Invalid environment structure: 'juju' should be a list of dictionaries with 'secret-id', 'name', and 'key'"
+            "Invalid environment structure: each item in 'juju' must either contain only 'secret-id' or all of 'secret-id', 'name', and 'key'"
         )
 
     # Validate vault key
