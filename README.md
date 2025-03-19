@@ -96,6 +96,8 @@ env:
     value: value1
   - name: key2
     value: value2
+  - name: key3-example
+    value: value3
 ```
 
 #### Juju User Secrets (Requires Juju 3.3+)
@@ -126,6 +128,11 @@ juju:
     key: key2
   - secret-id: <secret_id2> # reads all keys from this secret
 ```
+
+When providing only a secret ID, the charm will read all keys from this secret,
+and inject them into the workload container with `SCREAMING_SNAKE_CASE` (i.e. if
+the key is `access-token`, it will be available in the workload container as the
+`ACCESS_TOKEN` environment variable).
 
 #### Vault
 
