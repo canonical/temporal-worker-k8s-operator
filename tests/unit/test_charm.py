@@ -154,9 +154,7 @@ class TestCharm(TestCase):
         harness.update_config({"environment": invalid_environment_config_env})
         self.assertEqual(
             harness.model.unit.status,
-            BlockedStatus(
-                "Invalid environment structure: 'env' should be a list of dictionaries with 'name' and 'value'"
-            ),
+            BlockedStatus("Invalid environment structure. Check logs"),
         )
 
         invalid_environment_config_juju = dedent(
@@ -170,9 +168,7 @@ class TestCharm(TestCase):
         harness.update_config({"environment": invalid_environment_config_juju})
         self.assertEqual(
             harness.model.unit.status,
-            BlockedStatus(
-                "Invalid environment structure: each item in 'juju' must either contain only 'secret-id' or all of 'secret-id', 'name', and 'key'"
-            ),
+            BlockedStatus("Invalid environment structure. Check logs"),
         )
 
         invalid_environment_config_vault = dedent(
@@ -186,9 +182,7 @@ class TestCharm(TestCase):
         harness.update_config({"environment": invalid_environment_config_vault})
         self.assertEqual(
             harness.model.unit.status,
-            BlockedStatus(
-                "Invalid environment structure: 'vault' should be a list of dictionaries with 'path', 'name', and 'key'"
-            ),
+            BlockedStatus("Invalid environment structure. Check logs"),
         )
 
     @mock.patch("ops.jujuversion.JujuVersion.from_environ")

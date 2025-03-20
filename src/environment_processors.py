@@ -157,9 +157,8 @@ def parse_environment(yaml_string):
     if not isinstance(env, list) or not all(
         isinstance(item, dict) and "name" in item and "value" in item and len(item) == 2 for item in env
     ):
-        raise ValueError(
-            "Invalid environment structure: 'env' should be a list of dictionaries with 'name' and 'value'"
-        )
+        logging.debug("Invalid environment structure: 'env' should be a list of dictionaries with 'name' and 'value'")
+        raise ValueError("Invalid environment structure. Check logs")
 
     # Validate juju key
     juju = data.get("juju", [])
@@ -168,9 +167,10 @@ def parse_environment(yaml_string):
         and ((set(item.keys()) == {"secret-id"}) or (set(item.keys()) == {"secret-id", "name", "key"}))
         for item in juju
     ):
-        raise ValueError(
+        logging.debug(
             "Invalid environment structure: each item in 'juju' must either contain only 'secret-id' or all of 'secret-id', 'name', and 'key'"
         )
+        raise ValueError("Invalid environment structure. Check logs")
 
     # Validate vault key
     vault = data.get("vault", [])
@@ -178,9 +178,10 @@ def parse_environment(yaml_string):
         isinstance(item, dict) and "path" in item and "name" in item and "key" in item and len(item) == 3
         for item in vault
     ):
-        raise ValueError(
+        logging.debug(
             "Invalid environment structure: 'vault' should be a list of dictionaries with 'path', 'name', and 'key'"
         )
+        raise ValueError("Invalid environment structure. Check logs")
 
     parsed_data = {
         "env": [{"name": item.get("name"), "value": item.get("value")} for item in env],
