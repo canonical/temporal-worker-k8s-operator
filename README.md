@@ -126,7 +126,7 @@ juju:
   - secret-id: <secret_id1>
     name: env_var2
     key: key2
-  - secret-id: <secret_id2> # reads all keys from this secret
+  - secret-id: <secret_id2> # reads all keys from this secret.
 ```
 
 When providing only a secret ID, the charm will read all keys from this secret,
