@@ -183,12 +183,13 @@ options:
                       users: [test3]
                   redaction:
           juju:
-            - secret-id: <secret_id>
+            - secret-id: <secret_id1>
               name: sensitive1
               key: key1
-            - secret-id: <secret_id>
+            - secret-id: <secret_id1>
               name: sensitive2
               key: key2
+            - secret-id: <secret_id2> # reads all keys from this secret
           vault:
             - path: my-secrets
               name: sensitive1
