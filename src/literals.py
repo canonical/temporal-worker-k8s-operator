@@ -23,3 +23,21 @@ REQUIRED_OIDC_CONFIG = [
 ]
 SUPPORTED_AUTH_PROVIDERS = ["candid", "google"]
 PROMETHEUS_PORT = 9000
+AUTH_SECRET_PARAMETERS = [
+    "encryption-key",
+    "auth-provider",
+    "candid-url",
+    "candid-username",
+    "candid-public-key",
+    "candid-private-key",
+    "oidc-auth-type",
+    "oidc-project-id",
+    "oidc-private-key-id",
+    "oidc-private-key",
+    "oidc-client-email",
+    "oidc-client-id",
+    "oidc-auth-uri",
+    "oidc-token-uri",
+    "oidc-auth-cert-url",
+    "oidc-client-cert-url",
+]

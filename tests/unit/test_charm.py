@@ -19,6 +19,7 @@ from tests.unit.literals import (
     DATABASE_CONFIG,
     VAULT_CONFIG,
     WANT_ENV,
+    WANT_ENV_AUTH,
 )
 
 
@@ -71,6 +72,93 @@ class TestCharm(TestCase):
                     "startup": "enabled",
                     "override": "replace",
                     "environment": WANT_ENV,
+                }
+            },
+        }
+        got_plan = harness.get_container_pebble_plan("temporal-worker").to_dict()
+        self.assertEqual(got_plan, want_plan)
+
+        # The service was started.
+        service = harness.model.unit.get_container(CONTAINER_NAME).get_service("temporal-worker")
+        self.assertTrue(service.is_running())
+
+        self.assertEqual(harness.model.unit.status, MaintenanceStatus("replanning application"))
+        harness.charm.on.update_status.emit()
+
+        self.assertEqual(
+            harness.model.unit.status,
+            ActiveStatus(f"worker listening to namespace {CONFIG['namespace']!r} on queue {CONFIG['queue']!r}"),
+        )
+
+    def test_invalid_juju_secret(self):
+        """The charm raises goes into a blocked state if juju secret config is incorrectly formatted."""
+        harness = self.harness
+
+        auth_secret_id = harness.add_user_secret(
+            {
+                "auth-provider": "google",
+                "oidc-project-id": "example-project-id",
+                "oidc-private-key-id": "example-private-key-id",
+                "oidc-private-key": "example-private-key",
+                "oidc-client-email": "example-client-email",
+                "oidc-client-id": "example-client-id",
+                "oidc-auth-uri": "https://example.com/auth",
+                "oidc-token-uri": "https://example.com/token",
+                "oidc-auth-cert-url": "https://example.com/certs",
+                "oidc-client-cert-url": "https://example.com/client-certs",
+            }
+        )
+        harness.grant_secret(auth_secret_id, "temporal-worker-k8s")
+
+        updated_config = {**CONFIG}
+        updated_config.update({"auth-secret-id": auth_secret_id})
+        simulate_lifecycle(harness, updated_config)
+        harness.charm.on.config_changed.emit()
+
+        self.assertEqual(
+            harness.model.unit.status,
+            BlockedStatus("Invalid config: oidc-auth-type value missing"),
+        )
+
+    def test_auth_juju_secret(self):
+        """The charm fetches auth-related config from juju user secret."""
+        harness = self.harness
+
+        auth_secret_id = harness.add_user_secret(
+            {
+                "auth-provider": "google",
+                "encryption-key": "123",
+                "oidc-auth-type": "example-auth-type",
+                "oidc-project-id": "example-project-id",
+                "oidc-private-key-id": "example-private-key-id",
+                "oidc-private-key": "example-private-key",
+                "oidc-client-email": "example-client-email",
+                "oidc-client-id": "example-client-id",
+                "oidc-auth-uri": "https://example.com/auth",
+                "oidc-token-uri": "https://example.com/token",
+                "oidc-auth-cert-url": "https://example.com/certs",
+                "oidc-client-cert-url": "https://example.com/client-certs",
+            }
+        )
+        harness.grant_secret(auth_secret_id, "temporal-worker-k8s")
+
+        updated_config = {**CONFIG}
+        updated_config.update({"auth-secret-id": auth_secret_id})
+        simulate_lifecycle(harness, updated_config)
+        harness.charm.on.config_changed.emit()
+
+        want_env = {**WANT_ENV}
+        want_env.update(**WANT_ENV_AUTH)
+
+        # The plan is generated after pebble is ready.
+        want_plan = {
+            "services": {
+                "temporal-worker": {
+                    "summary": "temporal worker",
+                    "command": "./app/scripts/start-worker.sh",
+                    "startup": "enabled",
+                    "override": "replace",
+                    "environment": want_env,
                 }
             },
         }
