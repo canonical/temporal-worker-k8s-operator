@@ -66,13 +66,13 @@ options:
     type: string
 
   encryption-key:
-    description: (To be deprecated in favor of 'auth-secret-id') Base64-encoded key used for data encryption.
+    description: (Deprecated in favor of 'auth-secret-id') Base64-encoded key used for data encryption.
     default: ""
     type: string
 
   auth-provider:
     description: |
-      (To be deprecated in favor of 'auth-secret-id') Authentication provider for user authentication.
+      (Deprecated in favor of 'auth-secret-id') Authentication provider for user authentication.
     
       Acceptable values are "candid" and "google".
     default: ""
@@ -84,72 +84,72 @@ options:
     type: string
 
   candid-url:
-    description: (To be deprecated in favor of 'auth-secret-id') URL of the Candid service.
+    description: (Deprecated in favor of 'auth-secret-id') URL of the Candid service.
     default: ""
     type: string
 
   candid-username:
-    description: (To be deprecated in favor of 'auth-secret-id') Username for accessing the Candid service.
+    description: (Deprecated in favor of 'auth-secret-id') Username for accessing the Candid service.
     default: ""
     type: string
 
   candid-public-key:
-    description: (To be deprecated in favor of 'auth-secret-id') Public key for Candid authentication.
+    description: (Deprecated in favor of 'auth-secret-id') Public key for Candid authentication.
     default: ""
     type: string
 
   candid-private-key:
-    description: (To be deprecated in favor of 'auth-secret-id') Private key for Candid authentication.
+    description: (Deprecated in favor of 'auth-secret-id') Private key for Candid authentication.
     default: ""
     type: string
 
   oidc-auth-type:
-    description: (To be deprecated in favor of 'auth-secret-id') Authentication type for OIDC authentication.
+    description: (Deprecated in favor of 'auth-secret-id') Authentication type for OIDC authentication.
     default: "service_account"
     type: string
 
   oidc-project-id:
-    description: (To be deprecated in favor of 'auth-secret-id') Project ID for OIDC authentication.
+    description: (Deprecated in favor of 'auth-secret-id') Project ID for OIDC authentication.
     default: ""
     type: string
 
   oidc-private-key-id:
-    description: (To be deprecated in favor of 'auth-secret-id') Private key ID for OIDC authentication.
+    description: (Deprecated in favor of 'auth-secret-id') Private key ID for OIDC authentication.
     default: ""
     type: string
 
   oidc-private-key:
-    description: (To be deprecated in favor of 'auth-secret-id') Project key for OIDC authentication.
+    description: (Deprecated in favor of 'auth-secret-id') Project key for OIDC authentication.
     default: ""
     type: string
 
   oidc-client-email:
-    description: (To be deprecated in favor of 'auth-secret-id') Client email for OIDC authentication.
+    description: (Deprecated in favor of 'auth-secret-id') Client email for OIDC authentication.
     default: ""
     type: string
 
   oidc-client-id:
-    description: (To be deprecated in favor of 'auth-secret-id') Client ID for OIDC authentication.
+    description: (Deprecated in favor of 'auth-secret-id') Client ID for OIDC authentication.
     default: ""
     type: string
 
   oidc-auth-uri:
-    description: (To be deprecated in favor of 'auth-secret-id') Authentication URI for OIDC authentication.
+    description: (Deprecated in favor of 'auth-secret-id') Authentication URI for OIDC authentication.
     default: ""
     type: string
 
   oidc-token-uri:
-    description: (To be deprecated in favor of 'auth-secret-id') Token URI for OIDC authentication.
+    description: (Deprecated in favor of 'auth-secret-id') Token URI for OIDC authentication.
     default: ""
     type: string
 
   oidc-auth-cert-url:
-    description: (To be deprecated in favor of 'auth-secret-id') Authentication certificate URL for OIDC authentication.
+    description: (Deprecated in favor of 'auth-secret-id') Authentication certificate URL for OIDC authentication.
     default: ""
     type: string
 
   oidc-client-cert-url:
-    description: (To be deprecated in favor of 'auth-secret-id') Client certificate URL for OIDC authentication.
+    description: (Deprecated in favor of 'auth-secret-id') Client certificate URL for OIDC authentication.
     default: ""
     type: string
 
