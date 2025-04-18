@@ -22,6 +22,7 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 
 import environment_processors
 from literals import (
+    AUTH_SECRET_PARAMETERS,
     PROMETHEUS_PORT,
     REQUIRED_CANDID_CONFIG,
     REQUIRED_CHARM_CONFIG,
@@ -195,6 +196,45 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         except pebble.ConnectionError:
             return False
 
+    def get_auth_config_from_juju_secret(self) -> dict:
+        """Get auth config from Juju secret.
+
+        Returns:
+            dict: A dictionary containing the auth configuration.
+
+        Raises:
+            ValueError: if any of the required config is not set.
+        """
+        auth_config = {}
+        secret = self.model.get_secret(id=self.config.get("auth-secret-id"))
+        secret_content = secret.get_content(refresh=True)
+
+        if not secret_content["auth-provider"]:
+            raise ValueError("Invalid config: auth-provider value missing from auth-secret")
+
+        if secret_content["auth-provider"] == "candid":
+            self._check_required_config(secret_content, REQUIRED_CANDID_CONFIG)
+        elif secret_content["auth-provider"] == "google":
+            self._check_required_config(secret_content, REQUIRED_OIDC_CONFIG)
+
+        auth_config.update(
+            {
+                convert_env_var(key, prefix="TWC_"): value
+                for key, value in secret_content.items()
+                if key in AUTH_SECRET_PARAMETERS
+            }
+        )
+
+        auth_config.update(
+            {
+                convert_env_var(key, prefix="TEMPORAL_"): value
+                for key, value in secret_content.items()
+                if key in AUTH_SECRET_PARAMETERS
+            }
+        )
+
+        return auth_config
+
     def create_env(self) -> dict:
         """Create an environment dictionary with secrets from the parsed secrets data.
 
@@ -213,17 +253,18 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         charm_env = {**env_variables, **juju_variables, **vault_variables}
         return charm_env
 
-    def _check_required_config(self, config_list):
+    def _check_required_config(self, config_object, config_list):
         """Check if required config has been set by user.
 
         Args:
+            config_object: configuration object to check.
             config_list: list of required config parameters.
 
         Raises:
             ValueError: if any of the required config is not set.
         """
         for param in config_list:
-            if self.config[param].strip() == "":
+            if not config_object.get(param):
                 raise ValueError(f"Invalid config: {param} value missing")
 
     def _validate(self, event):  # noqa: C901
@@ -242,16 +283,16 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if not self._state.is_ready():
             raise ValueError("peer relation not ready")
 
-        self._check_required_config(REQUIRED_CHARM_CONFIG)
+        self._check_required_config(self.config, REQUIRED_CHARM_CONFIG)
 
-        if self.config["auth-provider"]:
+        if self.config["auth-provider"] and not self.config.get("auth-secret-id"):
             if not self.config["auth-provider"] in SUPPORTED_AUTH_PROVIDERS:
                 raise ValueError("Invalid config: auth-provider not supported")
 
             if self.config["auth-provider"] == "candid":
-                self._check_required_config(REQUIRED_CANDID_CONFIG)
+                self._check_required_config(self.config, REQUIRED_CANDID_CONFIG)
             elif self.config["auth-provider"] == "google":
-                self._check_required_config(REQUIRED_OIDC_CONFIG)
+                self._check_required_config(self.config, REQUIRED_OIDC_CONFIG)
 
         sample_rate = self.config["sentry-sample-rate"]
         if self.config["sentry-dsn"] and (sample_rate < 0 or sample_rate > 1):
@@ -280,12 +321,14 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             return
 
         context = {}
+        auth_config = {}
         try:
             self._validate(event)
-            environment_config = self.config.get("environment")
-            if environment_config:
+            if self.config.get("environment"):
                 charm_config_env = self.create_env()
                 context.update(charm_config_env)
+            if self.config.get("auth-secret-id"):
+                auth_config = self.get_auth_config_from_juju_secret()
         except ValueError as err:
             self.unit.status = BlockedStatus(str(err))
             return
@@ -307,7 +350,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             {
                 convert_env_var(key, prefix="TWC_"): value
                 for key, value in self.config.items()
-                if key not in ["environment"]
+                if key not in ["environment", "auth-secret-id"]
             }
         )
 
@@ -315,9 +358,14 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             {
                 convert_env_var(key, prefix="TEMPORAL_"): value
                 for key, value in self.config.items()
-                if key not in ["environment"]
+                if key not in ["environment", "auth-secret-id"]
             }
         )
+
+        # Auth configs coming from a juju secret take precedence over those coming from config.
+        # Auth config options will be deprecated in favor of using juju user secrets.
+        if auth_config:
+            context.update(**auth_config)
 
         context.update({"TWC_PROMETHEUS_PORT": PROMETHEUS_PORT, "TEMPORAL_PROMETHEUS_PORT": PROMETHEUS_PORT})
 

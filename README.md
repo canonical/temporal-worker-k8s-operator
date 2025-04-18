@@ -60,6 +60,54 @@ Note: The only requirement for the ROCK is to have a `scripts/start-worker.sh`
 file, which will be used as the entry point for the charm to start the workload
 container.
 
+### Authentication & Encryption
+
+The Charmed Temporal Worker can be used to authenticate against Candid or Google
+OAuth using the
+[temporal-lib-py](https://github.com/canonical/temporal-lib-py/tree/main/temporallib)
+library. It can also be used to encrypt workflow inputs and outputs so that
+these payloads are encrypted both in transit and at rest. To do so, a Juju user
+secret can be created with the following content:
+
+##### **`auth-secret.yaml`**
+
+```yaml
+encryption-key: <encryption_key> # Optional
+
+auth-provider: <auth_provider> # 'google' or 'candid'
+
+# Candid configuration (required if auth-provider is 'candid')
+candid-url: <candid_url>
+candid-username: <candid_username>
+candid-public-key: <candid_public_key>
+candid-private-key: <candid_private_key>
+
+# OIDC configuration (required if auth-provider is 'google')
+oidc-auth-type: <oidc_auth_type>
+oidc-project-id: <oidc_project_id>
+oidc-private-key-id: <oidc_private_key_id>
+oidc-private-key: <oidc_private_key>
+oidc-client-email: <oidc_client_email>
+oidc-client-id: <oidc_client_id>
+oidc-auth-uri: <oidc_auth_uri>
+oidc-token-uri: <oidc_token_uri>
+oidc-auth-cert-url: <oidc_auth_cert_url>
+oidc-client-cert-url: <oidc_client_cert_url>
+```
+
+```bash
+juju add-secret my-auth-secret --file=./auth-secret.yaml
+
+# Output: secret:<auth_secret_id>
+
+juju grant-secret my-auth-secret temporal-worker-k8s
+```
+
+Note: Prior to the introduction of Juju user secrets, this configuration was
+made possible via charm configuration in plaintext. This approach will soon be
+deprecated in favor of the more secure approach of using Juju user secrets as
+described here.
+
 ### Adding Secrets & Environment Variables
 
 The Charmed Temporal Worker allows the user to configure multiple sources of
