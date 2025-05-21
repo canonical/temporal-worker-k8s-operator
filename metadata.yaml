@@ -9,11 +9,11 @@ display-name: Temporal Worker
 summary: Temporal Worker operator
 description: |
   Temporal is a developer-first, open source platform that ensures
-  the successful execution of services and applications (using workflows). 
-  
-  This charm provides the Temporal worker which can connect to the Temporal 
+  the successful execution of services and applications (using workflows).
+
+  This charm provides the Temporal worker which can connect to the Temporal
   server via https to execute workflows.
-maintainers: 
+maintainers:
   - Commercial Systems <jaas-crew@lists.canonical.com>
 source: https://github.com/canonical/temporal-worker-k8s-operator
 docs: https://github.com/canonical/temporal-worker-k8s-operator
@@ -51,6 +51,8 @@ provides:
     interface: prometheus_scrape
   grafana-dashboard:
     interface: grafana_dashboard
+  workload-metrics-endpoint:
+    interface: prometheus_scrape
 
 requires:
   logging:
