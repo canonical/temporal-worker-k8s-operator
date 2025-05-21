@@ -82,11 +82,11 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         )
 
         if self.config.get("workload-prometheus-port"):
-            WORKLOAD_PROMETHEUS_PORT = self.config.get("workload-prometheus-port")
+            workload_prometheus_port = self.config.get("workload-prometheus-port")
             self._app_prometheus_scraping = MetricsEndpointProvider(
                 self,
                 relation_name="workload-metrics-endpoint",
-                jobs=[{"static_configs": [{"targets": [f"*:{WORKLOAD_PROMETHEUS_PORT}"]}]}],
+                jobs=[{"static_configs": [{"targets": [f"*:{workload_prometheus_port}"]}]}],
                 refresh_event=self.on.config_changed,
             )
 
