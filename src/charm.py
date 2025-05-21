@@ -81,6 +81,15 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             refresh_event=self.on.config_changed,
         )
 
+        if self.config.get("workload-prometheus-port"):
+            WORKLOAD_PROMETHEUS_PORT = self.config.get("workload-prometheus-port")
+            self._app_prometheus_scraping = MetricsEndpointProvider(
+                self,
+                relation_name="workload-metrics-endpoint",
+                jobs=[{"static_configs": [{"targets": [f"*:{WORKLOAD_PROMETHEUS_PORT}"]}]}],
+                refresh_event=self.on.config_changed,
+            )
+
         # Loki
         self._log_forwarder = LogForwarder(self, relation_name="logging")
 
