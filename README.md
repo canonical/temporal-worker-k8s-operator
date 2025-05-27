@@ -276,7 +276,7 @@ juju offer grafana:grafana-dashboard
 # Relate Temporal to the cos-lite apps:
 juju relate temporal-worker-k8s admin/cos.grafana
 juju relate temporal-worker-k8s admin/cos.loki
-juju relate temporal-worker-k8s admin/cos.prometheus
+juju relate temporal-worker-k8s:metrics-endpoint admin/cos.prometheus
 ```
 
 ```bash
@@ -284,6 +284,23 @@ juju relate temporal-worker-k8s admin/cos.prometheus
 juju run grafana/0 -m cos get-admin-password --wait 1m
 # Grafana is listening on port 3000 of the app ip address.
 # Dashboard can be accessed under "Temporal Worker SDK Metrics", make sure to select the juju model which contains your Charmed Temporal Worker.
+```
+
+### Workload Metrics
+
+If your workload exports metrics, then it can also be related to
+[Canonical Observability Stack](https://charmhub.io/topics/canonical-observability-stack).
+
+To enable workload metrics, run the following command:
+
+```bash
+juju config temporal-worker-k8s workload-prometheus-port <workload-metrics-port>
+```
+
+Then run the following command to relate it to cos-lite:
+```bash
+# Relate workload metrics cos-lite:
+juju relate temporal-worker-k8s:workload-metrics-endpoint admin/cos.prometheus
 ```
 
 ## Vault
