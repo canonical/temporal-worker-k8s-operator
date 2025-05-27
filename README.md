@@ -297,9 +297,9 @@ To enable workload metrics, run the following command:
 juju config temporal-worker-k8s workload-prometheus-port <workload-metrics-port>
 ```
 
-Then run the following command to relate it to cos-lite:
+Then run the following command to relate it to cos:
+
 ```bash
-# Relate workload metrics cos-lite:
 juju relate temporal-worker-k8s:workload-metrics-endpoint admin/cos.prometheus
 ```
 
