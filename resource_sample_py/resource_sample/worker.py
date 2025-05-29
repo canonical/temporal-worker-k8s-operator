@@ -11,6 +11,7 @@ import logging
 from activities.activity1 import compose_greeting
 from activities.activity2 import vault_test
 from activities.db_activity import database_test
+from prometheus_client import start_http_server
 from temporallib.client import Client, Options
 from temporallib.encryption import EncryptionOptions
 from temporallib.worker import SentryOptions, Worker, WorkerOptions
@@ -19,7 +20,7 @@ from workflows.workflow1 import DatabaseWorkflow, GreetingWorkflow, VaultWorkflo
 logger = logging.getLogger(__name__)
 
 
-async def run_worker():
+async def run_worker(metrics_port=9090):
     """Connect Temporal worker to Temporal server."""
     client = await Client.connect(
         client_opt=Options(encryption=EncryptionOptions()),
@@ -31,6 +32,8 @@ async def run_worker():
         activities=[compose_greeting, vault_test, database_test],
         worker_opt=WorkerOptions(sentry=SentryOptions()),
     )
+
+    start_http_server(metrics_port)
 
     await worker.run()
 
