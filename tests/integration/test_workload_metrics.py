@@ -17,9 +17,9 @@ logger = logging.getLogger(__name__)
 
 @pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("deploy")
-async def test_app_relations_cos_lite(ops_test: OpsTest):
+async def test_workload_metrics(ops_test: OpsTest):
     workload_metrics_port = 9090
-    await ops_test.model.applications[APP_NAME].set_config({"workload-prometheus-port": workload_metrics_port})
+    await ops_test.model.applications[APP_NAME].set_config({"workload-prometheus-port": str(workload_metrics_port)})
 
     await ops_test.model.deploy("cos-lite", trust=True, channel="latest/stable")
     logger.info("Deploying cos-lite bundle")
