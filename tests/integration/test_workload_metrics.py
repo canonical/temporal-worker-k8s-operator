@@ -47,7 +47,7 @@ async def test_workload_metrics(ops_test: OpsTest):
     time.sleep(70)
     prometheus_url = await get_unit_url(ops_test, "prometheus-k8s", 0, 9090, "http")
     with requests.Session() as http:
-        query_url = f"{prometheus_url}/api/v1/query=activity_execution_count"
+        query_url = f"{prometheus_url}/api/v1/query?query=activity_execution_count"
         resp = http.get(query_url)
 
     assert resp.status_code == 200
