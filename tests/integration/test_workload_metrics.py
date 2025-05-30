@@ -54,4 +54,3 @@ async def test_workload_metrics(ops_test: OpsTest):
 
     # if configured correctly there should be at least one metric present.
     assert resp.text.count("activity_execution_count") > 0
-    print(resp.text)
