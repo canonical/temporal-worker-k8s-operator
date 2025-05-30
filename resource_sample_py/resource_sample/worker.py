@@ -20,7 +20,7 @@ from workflows.workflow1 import DatabaseWorkflow, GreetingWorkflow, VaultWorkflo
 logger = logging.getLogger(__name__)
 
 
-async def run_worker(metrics_port=9090):
+async def run_worker(metrics_port=10080):
     """Connect Temporal worker to Temporal server."""
     client = await Client.connect(
         client_opt=Options(encryption=EncryptionOptions()),

@@ -160,6 +160,8 @@ async def run_sample_workflow(ops_test: OpsTest, workflow_type=None, use_env_var
         workflow_name = "VaultWorkflow"
     if workflow_type == "database":
         workflow_name = "DatabaseWorkflow"
+    if workflow_type == "workload_metrics":
+        workflow_name = "WorkloadMetricsWorkflow"
 
     # Execute workflow
     result = await client.execute_workflow(
