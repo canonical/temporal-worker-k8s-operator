@@ -6,7 +6,7 @@ from temporalio import activity
 from prometheus_client import Gauge
 
 # Metric that tracks the number of calls to the activity.
-EXECUTION_COUNT = Gauge("activity_execution_count", "Execution count")
+EXECUTION_COUNT = Gauge("workload_custom_count", "Execution count")
 
 # Basic activity that increments a metric.
 @activity.defn(name="metrics_test")
