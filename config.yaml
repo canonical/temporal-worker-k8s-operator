@@ -158,8 +158,8 @@ options:
     default: ""
     type: string
 
-  workload-prometheus-port:
-    description: Port of the workload defined metrics endpoint.
+  workflow-metrics-port:
+    description: Port of the Temporal workflow metrics endpoint.
     type: int
 
   environment:
