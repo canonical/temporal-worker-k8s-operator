@@ -5,7 +5,6 @@
 """Temporal worker charm workload metrics relation integration tests."""
 
 import logging
-import time
 
 import pytest
 import requests
@@ -47,6 +46,7 @@ async def test_workload_metrics(ops_test: OpsTest):
 
 @retry(stop=stop_after_attempt(10), wait=wait_exponential(multiplier=1, min=4, max=10))
 async def _verify_metrics(ops_test: OpsTest):
+    """Verify that workflow metrics exist and are scraped."""
     prometheus_url = await get_unit_url(ops_test, "prometheus-k8s", 0, 9090, "http")
     with requests.Session() as http:
         query_url = f"{prometheus_url}/api/v1/query?query=workload_custom_count"
