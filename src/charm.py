@@ -9,6 +9,7 @@
 import logging
 import os
 import secrets
+from typing import List
 
 import yaml
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
@@ -77,24 +78,26 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self._prometheus_scraping = MetricsEndpointProvider(
             self,
             relation_name="metrics-endpoint",
-            jobs=[{"static_configs": [{"targets": [f"*:{PROMETHEUS_PORT}"]}]}],
+            jobs=self._scrape_jobs,
             refresh_event=self.on.config_changed,
         )
-
-        if self.config.get("workload-prometheus-port"):
-            workload_prometheus_port = self.config.get("workload-prometheus-port")
-            self._app_prometheus_scraping = MetricsEndpointProvider(
-                self,
-                relation_name="workload-metrics-endpoint",
-                jobs=[{"static_configs": [{"targets": [f"*:{workload_prometheus_port}"]}]}],
-                refresh_event=self.on.config_changed,
-            )
 
         # Loki
         self._log_forwarder = LogForwarder(self, relation_name="logging")
 
         # Grafana
         self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
+
+    @property
+    def _scrape_jobs(self) -> List[dict]:
+        """Return a list of jobs for configuring a single metrics requirer."""
+        # By default we always want to return this job for the charm's metrics
+        jobs = [{"job_name": "charm-metrics", "static_configs": [{"targets": [f"*:{PROMETHEUS_PORT}"]}]}]
+
+        if workflow_port := self.config.get("workflow-metrics-port"):
+            jobs.append({"job_name": "workflow-metrics", "static_configs": [{"targets": [f"*:{workflow_port}"]}]})
+
+        return jobs
 
     @log_event_handler(logger)
     def _on_install(self, event):
