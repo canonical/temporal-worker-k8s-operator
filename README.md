@@ -276,7 +276,7 @@ juju offer grafana:grafana-dashboard
 # Relate Temporal to the cos-lite apps:
 juju relate temporal-worker-k8s admin/cos.grafana
 juju relate temporal-worker-k8s admin/cos.loki
-juju relate temporal-worker-k8s admin/cos.prometheus
+juju relate temporal-worker-k8s:metrics-endpoint admin/cos.prometheus
 ```
 
 ```bash
@@ -285,6 +285,26 @@ juju run grafana/0 -m cos get-admin-password --wait 1m
 # Grafana is listening on port 3000 of the app ip address.
 # Dashboard can be accessed under "Temporal Worker SDK Metrics", make sure to select the juju model which contains your Charmed Temporal Worker.
 ```
+
+### Workflow Metrics
+
+Provided your Temporal workflow is emitting metrics 
+(see [Temporal SDK metrics reference](https://docs.temporal.io/references/sdk-metrics)), 
+they can be scraped and displayed by the Canonical Observability Stack. 
+To do so:
+
+1. Configure the `workflow-metrics-port` - this is the port where metrics are emitted by your Temporal workflow.
+```bash
+juju config temporal-worker-k8s workflow-metrics-port <workflow-metrics-port>
+```
+2. Integrate the `temporal-worker-k8s` charm to a metrics scraper.
+(e.g. `prometheus` or `grafana-agent`)
+```bash
+# For example, integrate directly to prometheus, given it is deployed in the cos model
+juju integrate temporal-worker-k8s:metrics-endpoint admin/cos.prometheus
+```
+3. Follow COS' [Getting started guide](https://documentation.ubuntu.com/observability/tutorial/installation/getting-started-with-cos-lite/#browse-dashboards) 
+for browsing available dashboards.
 
 ## Vault
 

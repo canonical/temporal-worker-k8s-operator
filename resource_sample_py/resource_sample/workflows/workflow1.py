@@ -9,6 +9,7 @@ with workflow.unsafe.imports_passed_through():
     import activities.activity1 as all_activities1
     import activities.activity2 as all_activities2
     import activities.db_activity as db_activity
+    import activities.workload_metrics as workload_metrics
 
 # Basic workflow that logs and invokes an activity
 @workflow.defn(name="GreetingWorkflow")
@@ -44,4 +45,15 @@ class DatabaseWorkflow:
             db_activity.database_test,
             all_activities1.ComposeGreetingInput("Hello", name),
             start_to_close_timeout=timedelta(seconds=120),
+        )
+
+
+@workflow.defn(name="WorkloadMetricsWorkflow")
+class WorkloadMetricsWorkflow:
+    @workflow.run
+    async def run(self, name: str) -> str:
+        workflow.logger.info("Running workflow with parameter %s" % name)
+        return await workflow.execute_activity(
+            workload_metrics.metrics_test,
+            start_to_close_timeout=timedelta(seconds=10),
         )
