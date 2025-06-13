@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.usefixtures("deploy")
 async def test_workload_metrics(ops_test: OpsTest):
     workflow_metrics_port = 10080
-    await ops_test.model.applications[APP_NAME].set_config({"workflow-prometheus-port": str(workflow_metrics_port)})
+    await ops_test.model.applications[APP_NAME].set_config({"workflow-metrics-port": str(workflow_metrics_port)})
 
     await ops_test.model.deploy("prometheus-k8s", trust=True, channel="latest/stable")
     logger.info("Deploying prometheus-k8s")
