@@ -33,6 +33,7 @@ from literals import (
 from log import log_event_handler
 from relations.postgresql import Postgresql
 from relations.vault import VAULT_NONCE_SECRET_LABEL, VaultRelation
+from relations.worker_consumer import WorkerConsumer
 from state import State
 from vault.actions import VaultActions
 
@@ -63,6 +64,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self.framework.observe(self.on.update_status, self._on_update_status)
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.secret_changed, self._on_secret_changed)
+        self.framework.observe(self.on.host_info_relation_joined, self._on_host_info_relation_changed)
+        self.framework.observe(self.on.host_info_relation_changed, self._on_host_info_relation_changed)
 
         # Vault
         self.vault = vault_kv.VaultKvRequires(
@@ -86,6 +89,9 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         # Grafana
         self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
+
+        # Worker Consumer
+        self.worker_consumer = WorkerConsumer(self)
 
     @log_event_handler(logger)
     def _on_install(self, event):
@@ -180,6 +186,17 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self.unit.status = ActiveStatus(
             f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
         )
+    @log_event_handler(logger)
+    def _on_host_info_relation_changed(self, event):
+        if not self._state.is_ready():
+            event.defer()
+            return
+        self.unit.status = WaitingStatus(f"Handling {event.relation.name} change")
+        relation = self.model.get_relation("host_info")
+        if relation is None:
+            return
+        self._state.host = relation.data[self.app]["host_info"]["host"]
+        self._update(event)
 
     def _validate_pebble_plan(self, container):
         """Validate Temporal worker pebble plan.
@@ -352,6 +369,13 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             value = os.environ.get(env_var)
             if value:
                 context.update({key: value})
+
+        context.update(
+            {
+                "TWC_HOST": self._state.host,
+                "TEMPORAL_HOST": self._state.host,
+            }
+        )
 
         context.update(
             {
