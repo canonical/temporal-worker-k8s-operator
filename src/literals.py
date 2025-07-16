@@ -7,7 +7,7 @@
 
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
-REQUIRED_CHARM_CONFIG = ["host", "namespace", "queue"]
+REQUIRED_CHARM_CONFIG = ["namespace", "queue"]
 REQUIRED_CANDID_CONFIG = ["candid-url", "candid-username", "candid-public-key", "candid-private-key"]
 REQUIRED_OIDC_CONFIG = [
     "oidc-auth-type",
