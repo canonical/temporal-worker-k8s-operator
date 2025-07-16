@@ -23,9 +23,9 @@ class WorkerConsumer(framework.Object):
         super().__init__(charm, "worker-consumer")
         self.charm = charm
 
-        charm.framework.observe(charm.worker_consumer_relation_joined, self._on_worker_consumer_changed)
-        charm.framework.observe(charm.worker_consumer_relation_changed, self._on_worker_consumer_changed)
-        charm.framework.observe(charm.config_changed, self._on_worker_consumer_changed)
+        charm.framework.observe(charm.on.worker_consumer_relation_joined, self._on_worker_consumer_changed)
+        charm.framework.observe(charm.on.worker_consumer_relation_changed, self._on_worker_consumer_changed)
+        charm.framework.observe(charm.on.config_changed, self._on_worker_consumer_changed)
 
     @log_event_handler(logger)
     def _on_worker_consumer_changed(self, event):
