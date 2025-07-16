@@ -37,4 +37,4 @@ class WorkerConsumer(framework.Object):
                     relation.data[self.charm.app]["namespace"] = self.charm.config["namespace"]
                     relation.data[self.charm.app]["queue"] = self.charm.config["queue"]
             else:
-                self.unit.status = BlockedStatus("Waiting for host-info relation before processing worker-consumer relation.")
+                self.charm.unit.status = BlockedStatus("Waiting for host-info relation before processing worker-consumer relation.")
