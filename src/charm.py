@@ -192,10 +192,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             event.defer()
             return
         self.unit.status = WaitingStatus(f"Handling {event.relation.name} change")
-        relation = self.model.get_relation("host_info")
-        if relation is None:
-            return
-        self._state.host = relation.data[self.app]["host_info"]["host"]
+        self._state.host = event.relation.data[event.app]["host"]
         self._update(event)
 
     def _validate_pebble_plan(self, container):

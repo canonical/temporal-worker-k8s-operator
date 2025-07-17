@@ -32,7 +32,6 @@ class WorkerConsumer(framework.Object):
         if self.charm.unit.is_leader():
             if host := self.charm._state.host:
                 for relation in self.charm.model.relations.get("worker_consumer", ()):
-
                     relation.data[self.charm.app]["host"] = host
                     relation.data[self.charm.app]["namespace"] = self.charm.config["namespace"]
                     relation.data[self.charm.app]["queue"] = self.charm.config["queue"]
