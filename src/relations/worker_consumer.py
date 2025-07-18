@@ -31,7 +31,7 @@ class WorkerConsumer(framework.Object):
     def _on_worker_consumer_changed(self, event):
         if self.charm.unit.is_leader():
             if host := self.charm._state.host:
-                for relation in self.charm.model.relations.get("worker_consumer", ()):
+                for relation in self.charm.model.relations.get("worker-consumer", ()):
                     relation.data[self.charm.app]["host"] = host
                     relation.data[self.charm.app]["namespace"] = self.charm.config["namespace"]
                     relation.data[self.charm.app]["queue"] = self.charm.config["queue"]
