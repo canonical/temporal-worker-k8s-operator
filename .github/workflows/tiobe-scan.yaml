@@ -40,7 +40,6 @@ jobs:
           mode: qserver
           project: temporal-worker-k8s-operator
           branchdir: .
-          filelist: .github/tics-filelist.txt
           viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=default
           ticsAuthToken: ${{ secrets.TICSAUTHTOKEN }}
           installTics: true
