@@ -19,3 +19,4 @@ jobs:
       self-hosted-runner: false
       microk8s-addons: "dns ingress rbac storage metallb:10.15.119.2-10.15.119.4 registry"
       upload-image: "artifact"
+      trivy-image-config: ".github/integration-trivy-config.yaml"
