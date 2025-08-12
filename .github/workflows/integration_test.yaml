@@ -10,7 +10,7 @@ on:
 
 jobs:
   integration-tests:
-    uses: dnplas/operator-workflows/.github/workflows/integration_test.yaml@dnplas-trivy-exit-code-as-input
+    uses: canonical/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
     with:
       channel: 1.25-strict/stable
