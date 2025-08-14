@@ -26,7 +26,7 @@ jobs:
 
       - name: Generate coverage.xml
         run: |
-          coverage xml -o coverage.xml
+          coverage xml -o coverage.xml --omit '*/lib/*'
 
       - name: Prep coverage for TICS
         run: |
