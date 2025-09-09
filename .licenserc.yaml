@@ -35,4 +35,5 @@ header:
     - 'trivy.yaml'
     - 'lib/**'
     - '**/*.env'
+    - 'terraform/**'
   comment: on-failure

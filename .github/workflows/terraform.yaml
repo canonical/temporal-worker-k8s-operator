@@ -38,7 +38,7 @@ jobs:
 
   lint:
     name: Terraform lint
-    uses: canonical/charmed-kubeflow-workflows/.github/workflows/terraform-lint.yaml
+    uses: canonical/charmed-kubeflow-workflows/.github/workflows/terraform-lint.yaml@main
     with:
       module-path: .
 
