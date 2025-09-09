@@ -1,6 +1,10 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+[project]
+name = "temporal-worker-k8s-operator"
+version = "0.0"
+
 [tool.bandit]
 exclude_dirs = ["/venv/"]
 [tool.bandit.assert_used]
