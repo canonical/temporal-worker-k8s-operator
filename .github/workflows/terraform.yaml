@@ -18,7 +18,8 @@ jobs:
           ref: ${{ github.ref }}
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        run: |
+          sudo snap install terraform --classic
 
       - name: Initialize Terraform module
         run: terraform init
@@ -38,9 +39,20 @@ jobs:
 
   lint:
     name: Terraform lint
-    uses: canonical/charmed-kubeflow-workflows/.github/workflows/terraform-lint.yaml@main
-    with:
-      module-path: .
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          set +e
+          sudo snap install terraform --classic
+          sudo snap install tflint
+
+      - name: Run tflint
+        run: tflint --chdir ./terraform/
 
   apply:
     name: Terraform apply
@@ -55,6 +67,7 @@ jobs:
           set +e
           sudo snap install concierge --classic
           sudo concierge prepare -p k8s
+          sudo k8s bootstrap
 
       - name: Add juju model
         run: |
