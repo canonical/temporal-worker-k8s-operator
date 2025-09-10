@@ -66,6 +66,7 @@ jobs:
         run: |
           set +e
           sudo apt-get purge $(dpkg -l | grep -i docker | awk '{print $2}')
+          sudo rm -r /run/containerd/*
 
           sudo snap install concierge --classic
           sudo concierge prepare -p k8s
