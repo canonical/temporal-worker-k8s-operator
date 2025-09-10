@@ -7,8 +7,8 @@ terraform {
     }
 
     null = {
-        source = "null"
-        version = ">=3.2.4"
+      source  = "null"
+      version = ">=3.2.4"
     }
   }
 }
