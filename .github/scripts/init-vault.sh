@@ -2,10 +2,17 @@
 set -euo pipefail
 
 echo "Initializing Vault..."
-juju run vault-k8s/leader init --wait > vault-init.json
 
-# Grab the first unseal key using jq (already available on GitHub runners)
-KEY=$(jq -r '.[].results."unseal-keys"[0]' vault-init.json)
+# Run the init action and capture the action ID
+ACTION_ID=$(juju run-action vault-k8s/leader init --wait --format json | jq -r '.["action"]["id"]')
+
+# Retrieve full action output
+juju show-action-output "$ACTION_ID" --format json > vault-init.json
+
+# Extract the first unseal key
+KEY=$(jq -r '.["0"].results."unseal-keys"[0]' vault-init.json)
 
 echo "Unsealing Vault..."
-juju run vault-k8s/0 unseal key="$KEY" --wait
+juju run-action vault-k8s/0 unseal key="$KEY" --wait
+
+echo "Vault initialized and unsealed successfully."
