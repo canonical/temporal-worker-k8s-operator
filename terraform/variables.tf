@@ -62,20 +62,14 @@ variable "log_level" {
 
 variable "sentry_config" {
   type = object({
-    dsn           = optional(string)
-    release       = optional(string)
-    environment   = optional(string)
-    redact_params = optional(bool)
-    sample_rate   = optional(number)
+    dsn           = optional(string, "")
+    release       = optional(string, "")
+    environment   = optional(string, "")
+    redact_params = optional(bool, false)
+    sample_rate   = optional(number, 1.0)
   })
   description = "Sentry related configurations"
-  default = {
-    dsn           = "",
-    release       = "",
-    environment   = "",
-    redact_params = false,
-    sample_rate   = 1.0
-  }
+  default     = {}
 }
 
 variable "vault_secrets" {
