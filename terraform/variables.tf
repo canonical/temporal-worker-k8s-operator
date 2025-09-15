@@ -1,4 +1,4 @@
-variable "name" {
+variable "app_name" {
   type        = string
   description = "Name of the deployed application"
   default     = "temporal-worker-k8s"
@@ -18,107 +18,32 @@ variable "model" {
 variable "revision" {
   type        = number
   description = "Revision of the charm to deploy"
-  default     = 23
+  default     = null
 }
 
 variable "channel" {
   type        = string
   description = "Charmhub channel to deploy the charm from"
-  default     = "latest/edge" # TODO: change to 1.0/edge
+  default     = "latest/edge" # TODO: change to 1.0/edge (after https://github.com/canonical/temporal-worker-k8s-operator/issues/69 resolved)
+}
+
+variable "constraints" {
+  type        = string
+  description = "Constraints to be used when deploying this application"
+  default     = "arch=amd64"
 }
 
 variable "image" {
   type = object({
-    image    = string
-    username = optional(string)
-    password = optional(string)
+    image             = string
+    registry_username = optional(string, "")
+    registry_password = optional(string, "")
   })
   description = "Details of the worker image"
 }
 
-variable "host" {
-  type        = string
-  description = "The hostname of the Temporal server"
-  default     = ""
-}
-
-variable "queue" {
-  type        = string
-  description = "Temporal task queue that the worker should connect to"
-  default     = ""
-}
-
-variable "namespace" {
-  type        = string
-  description = "Temporal namespace that the worker should connect to"
-  default     = ""
-}
-
-variable "log_level" {
-  type        = string
-  description = "Log level of gunicorn"
-  default     = "info"
-}
-
-variable "sentry_config" {
-  type = object({
-    dsn           = optional(string, "")
-    release       = optional(string, "")
-    environment   = optional(string, "")
-    redact_params = optional(bool, false)
-    sample_rate   = optional(number, 1.0)
-  })
-  description = "Sentry related configurations"
+variable "config" {
+  type        = map(string)
+  description = "Configurations to deploy this application with"
   default     = {}
-}
-
-variable "vault_secrets" {
-  type = list(object({
-    path = string
-    name = string
-    key  = string
-  }))
-  description = "Vault secrets to pass to the worker"
-  default     = []
-}
-
-variable "juju_secrets" {
-  type = list(object({
-    secret_id = string
-    name      = optional(string)
-    key       = optional(string)
-  }))
-  description = "JUju secrets to pass to the worker"
-  default     = []
-}
-
-variable "environment_variables" {
-  type = list(object({
-    name  = string
-    value = string
-  }))
-  description = "Plaintext environment variables to pass to the worker"
-  default     = []
-}
-
-variable "auth_secret_id" {
-  type        = string
-  description = "Juju secret ID containing authentication and encryption key parameters"
-  default     = ""
-}
-
-variable "tls" {
-  type = object({
-    root_cas = string
-  })
-  description = "Certificate parameters to establish TLS communication"
-  default = {
-    root_cas = ""
-  }
-}
-
-variable "db_name" {
-  type        = string
-  description = "Name of the database created when relating to the database charm"
-  default     = ""
 }
