@@ -87,7 +87,7 @@ jobs:
 
           terraform init
 
-          terraform apply -auto-approve -var 'image={"image": "ghcr.io/canonical/temporal-worker:e2524cf20e20b00369a15052e849f595ac2331cd-_1.0_amd64"}' -var 'model=terraform'
+          terraform apply -auto-approve -var 'image={"image": "ghcr.io/canonical/temporal-worker:e2524cf20e20b00369a15052e849f595ac2331cd-_1.0_amd64"}' -var 'model=terraform' -var 'channel=latest/edge'
 
       - name: Wait for application
         run: |

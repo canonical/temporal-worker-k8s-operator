@@ -24,7 +24,7 @@ variable "revision" {
 variable "channel" {
   type        = string
   description = "Charmhub channel to deploy the charm from"
-  default     = "latest/edge" # TODO: change to 1.0/edge (after https://github.com/canonical/temporal-worker-k8s-operator/issues/69 resolved)
+  default     = "1.0/stable"
 }
 
 variable "constraints" {
