@@ -1,0 +1,52 @@
+set export := true # Just variables are exported into environment variables
+
+[private]
+default:
+    just --list
+
+[private]
+initialize:
+    #!/usr/bin/bash
+    if [ ! -d ".terraform" ]; then
+        terraform init
+    fi
+
+# Run terraform format
+fmt: (initialize)
+    terraform fmt
+
+# Run terraform validate
+validate: (initialize)
+    terraform validate
+
+# Run tflint
+lint:
+    tflint
+
+# Apply the terraform plan with the provided variables file
+apply variables_file: (initialize)
+    terraform apply -auto-approve -var-file="${variables_file}"
+
+# Destroy the terraform plan with the provided variables file
+destroy variables_file:
+    terraform destroy -auto-approve -var-file="${variables_file}"
+
+    juju destroy-model terraform --no-prompt
+
+test:
+    #!/usr/bin/bash
+    set -euxo pipefail
+
+    trap 'rm test.tfvars' EXIT    
+
+    juju add-model terraform || true
+
+    echo 'model = "terraform"' > test.tfvars
+    echo 'image = {"image": "ghcr.io/canonical/temporal-worker:e2524cf20e20b00369a15052e849f595ac2331cd-_1.0_amd64"}' >> test.tfvars
+    echo 'channel = "latest/edge"' >> test.tfvars
+
+    just apply "test.tfvars"
+
+    juju wait-for model terraform --query="forEach(units, unit => (unit.workload-status == 'blocked'))"
+
+    just destroy "test.tfvars"

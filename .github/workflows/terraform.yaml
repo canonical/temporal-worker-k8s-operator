@@ -21,25 +21,17 @@ jobs:
         run: |
           sudo snap install terraform --classic
 
-      - name: Initialize Terraform module
-        run: terraform init
-
-      - name: Validate Terraform Module
-        run: terraform validate -no-color
-
-      - name: Validate Terraform fmt
+      - name: Run terraform format
         run: |
-          set +e
-          terraform fmt -recursive -check -diff
-          FMT_STATUS="$?"
-          if [[ "$FMT_STATUS" -ne 0 ]]; then
-            echo "❌ terraform fmt failed" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          exit "$FMT_STATUS"
+          just validate
+          just fmt
 
   lint:
     name: Terraform lint
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./terraform
 
     steps:
       - name: Checkout repository
@@ -52,11 +44,14 @@ jobs:
           sudo snap install tflint
 
       - name: Run tflint
-        run: tflint --chdir ./terraform/
+        run: just lint
 
   apply:
     name: Terraform apply
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./terraform
 
     steps:
       - name: Checkout repository
@@ -73,29 +68,9 @@ jobs:
           sudo snap install concierge --classic
           sudo concierge prepare -p k8s
 
-      - name: Add juju model
-        run: juju add-model terraform
-
       - name: Install dependencies
         run: |
           sudo snap install terraform --classic
 
-      - name: Apply terraform
-        working-directory: terraform
-        run: |
-          set +e
-
-          terraform init
-
-          terraform apply -auto-approve -var 'image={"image": "ghcr.io/canonical/temporal-worker:e2524cf20e20b00369a15052e849f595ac2331cd-_1.0_amd64"}' -var 'model=terraform' -var 'channel=latest/edge'
-
-      - name: Wait for application
-        run: |
-          juju wait-for model terraform --query="forEach(units, unit => (unit.workload-status == 'blocked'))"
-      
-      - name: Juju status
-        run: juju status
-
-      - name: Dump logs
-        if: failure()
-        uses: canonical/charming-actions/dump-logs@2.6.3
+      - name: Run terraform apply
+        run: just test
