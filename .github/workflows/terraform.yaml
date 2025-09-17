@@ -1,79 +1,10 @@
 name: Terraform checks
 
-on:
-  pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  format:
-    name: Terraform format
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./terraform
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
-
-      - name: Setup Terraform and Just
-        run: |
-          sudo snap install terraform --classic
-          sudo snap install just --classic
-
-      - name: Run terraform format
-        run: |
-          just validate
-          just fmt
-
-  lint:
-    name: Terraform lint
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./terraform
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          set +e
-          sudo snap install terraform --classic
-          sudo snap install tflint
-          sudo snap install just --classic
-
-      - name: Run tflint
-        run: just lint
-
-  apply:
-    name: Terraform apply
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./terraform
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up operator environment
-        run: |
-          set +e
-
-          sudo apt-get purge $(dpkg -l | grep -i docker | awk '{print $2}')
-          sudo apt-get purge containerd.io
-          sudo rm -r /run/containerd
-
-          sudo snap install concierge --classic
-          sudo concierge prepare -p k8s
-
-      - name: Install dependencies
-        run: |
-          sudo snap install terraform --classic
-          sudo snap install just --classic
-
-      - name: Run terraform apply
-        run: just test
+  pull-request-terraform-checks:
+    name: PR Terraform checks
+    uses: canonical/workflows-team/.github/workflows/terraform.yaml@feature/terraform_workflows
