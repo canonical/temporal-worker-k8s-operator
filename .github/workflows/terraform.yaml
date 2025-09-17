@@ -17,9 +17,10 @@ jobs:
         with:
           ref: ${{ github.ref }}
 
-      - name: Setup Terraform
+      - name: Setup Terraform and Just
         run: |
           sudo snap install terraform --classic
+          sudo snap install just --classic
 
       - name: Run terraform format
         run: |
@@ -42,6 +43,7 @@ jobs:
           set +e
           sudo snap install terraform --classic
           sudo snap install tflint
+          sudo snap install just --classic
 
       - name: Run tflint
         run: just lint
@@ -71,6 +73,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo snap install terraform --classic
+          sudo snap install just --classic
 
       - name: Run terraform apply
         run: just test
