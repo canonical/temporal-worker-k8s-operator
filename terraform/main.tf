@@ -17,6 +17,8 @@ resource "juju_application" "temporal_worker_k8s" {
 
 resource "null_resource" "attach_image" {
   provisioner "local-exec" {
+    # Needed since juju_application resource does not support resource map to specify registry creds
+    # Refactor once https://github.com/juju/terraform-provider-juju/issues/620 resolved
     command = <<EOT
       echo "${yamlencode({
     "registrypath" = var.image.image,

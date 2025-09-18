@@ -14,9 +14,16 @@ start-local-registry: (stop-local-registry)
     docker run -d -p 5000:5000 --name registry registry:2.7
 
 [private]
-build-docker-image: (start-local-registry)
-    cd test && docker buildx build -f ./Dockerfile -t localhost:5000/temporal-worker:test-terraform .
+build-and-push-image: (start-local-registry)
+    #!/usr/bin/bash
+    cd test
+    rockcraft pack
 
+    rock_file=$(ls | grep "\.rock")
+
+    rockcraft.skopeo --insecure-policy copy --dest-tls-verify=false \
+        "oci-archive:${rock_file}" \
+        "docker://localhost:5000/temporal-worker:test-terraform"
 
 [private]
 initialize:
@@ -55,7 +62,7 @@ destroy variables_file:
 
     just destroy-model
 
-test: (build-docker-image)
+test: (build-and-push-image)
     #!/usr/bin/bash
     set -euxo pipefail
 
@@ -65,4 +72,4 @@ test: (build-docker-image)
 
     just apply "./test/test.tfvars"
 
-    juju wait-for model terraform --query="forEach(units, unit => (unit.workload-status == 'blocked'))"
+    juju wait-for model terraform --query="forEach(units, unit => (unit.workload-status == 'blocked' && unit.workload-message == 'Invalid config: host value missing'))"
