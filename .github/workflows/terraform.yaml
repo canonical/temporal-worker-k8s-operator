@@ -12,7 +12,7 @@ on:
 
 jobs:
   pull-request-terraform-checks:
-    name: PR Terraform checks
+    name: Terraform checks
     uses: canonical/workflows-team/.github/workflows/terraform.yaml@feature/terraform_workflows
     with:
       install-docker: true
