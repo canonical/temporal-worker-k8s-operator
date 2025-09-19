@@ -14,3 +14,5 @@ jobs:
   pull-request-terraform-checks:
     name: PR Terraform checks
     uses: canonical/workflows-team/.github/workflows/terraform.yaml@feature/terraform_workflows
+    with:
+      extra-snaps: "docker"
