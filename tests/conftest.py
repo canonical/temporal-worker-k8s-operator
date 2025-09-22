@@ -16,3 +16,6 @@ def pytest_addoption(parser: pytest.Parser):
     parser.addoption("--charm-file", action="append", default=[])
     # The image name:tag.
     parser.addoption("--temporal-worker-image", action="store", default="")
+    # Terraform test image - ignored. Added since operator-workflows does not
+    # offer option to ignore rockcraft files in specified directories
+    parser.addoption("--temporal-worker-test-image", action="store", default="")

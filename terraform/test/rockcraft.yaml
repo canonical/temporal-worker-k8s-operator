@@ -1,0 +1,29 @@
+name: temporal-worker-test
+base: ubuntu@24.04 # the base environment for this rock
+version: '1.0' # just for humans. Semantic versioning is recommended
+summary: Rock to be used for terraform module tests for temporal-worker-k8s
+
+description: |
+    This rock is to be used for tests in the temporal-worker-k8s repository. In
+    particular, the rock will be built and specified as the image when applying
+    the terraform module in the repo while testing the module.
+platforms:
+    amd64:
+
+services:
+    temporal-worker:
+        description: Service for temporal worker that busy waits
+        command: app/scripts/start-worker.sh
+        override: replace
+        startup: enabled
+        user: ubuntu
+
+parts:
+    entrypoint-script:
+        plugin: dump
+        source: .
+        source-type: local
+        organize:
+            start-worker.sh: app/scripts/start-worker.sh
+        stage:
+            - app/scripts/start-worker.sh
