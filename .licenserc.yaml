@@ -36,4 +36,6 @@ header:
     - 'lib/**'
     - '**/*.env'
     - 'terraform/**'
+    - "uv.lock"
+    - "src/*.egg-info/**"
   comment: on-failure

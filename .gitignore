@@ -11,3 +11,5 @@ __pycache__/
 *.tar.gz
 *.rock
 *.lock
+*.egg.info/
+src/temporal_worker_k8s_operator.egg-info/
