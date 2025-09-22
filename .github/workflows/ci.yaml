@@ -10,10 +10,15 @@ jobs:
   test-charm:
     uses: ./.github/workflows/integration_test.yaml
 
+  test-terraform-module:
+    uses: ./.github/workflows/terraform.yaml
+
+
   release-charm:
     name: Release the charm
     needs:
       - test-charm
+      - test-terraform-module
     uses: canonical/observability/.github/workflows/_charm-release.yaml@v1
     permissions:
       contents: write

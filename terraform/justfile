@@ -1,0 +1,75 @@
+set export := true # Just variables are exported into environment variables
+
+[private]
+default:
+    just --list
+
+[private]
+stop-local-registry:
+    docker stop registry || true
+    docker rm registry || true
+
+[private]
+start-local-registry: (stop-local-registry)
+    docker run -d -p 5000:5000 --name registry registry:2.7
+
+[private]
+build-and-push-image: (start-local-registry)
+    #!/usr/bin/bash
+    cd test
+    rockcraft pack
+
+    rock_file=$(ls | grep "\.rock")
+
+    rockcraft.skopeo --insecure-policy copy --dest-tls-verify=false \
+        "oci-archive:${rock_file}" \
+        "docker://localhost:5000/temporal-worker:test-terraform"
+
+[private]
+initialize:
+    #!/usr/bin/bash
+    if [ ! -d ".terraform" ]; then
+        terraform init
+    fi
+
+[private]
+destroy-model:
+    juju destroy-model --no-prompt --destroy-storage terraform || true
+
+[private]
+add-model: (destroy-model)
+    juju add-model terraform
+
+# Run terraform format
+fmt: (initialize)
+    terraform fmt
+
+# Run terraform validate
+validate: (initialize)
+    terraform validate
+
+# Run tflint
+lint:
+    tflint
+
+# Apply the terraform plan with the provided variables file
+apply variables_file: (initialize)
+    terraform apply -auto-approve -var-file="${variables_file}"
+
+# Destroy the terraform plan with the provided variables file
+destroy variables_file:
+    terraform destroy -auto-approve -var-file="${variables_file}"
+
+    just destroy-model
+
+test: (build-and-push-image)
+    #!/usr/bin/bash
+    set -euxo pipefail
+
+    trap 'just destroy "./test/test.tfvars"' EXIT
+
+    just add-model
+
+    just apply "./test/test.tfvars"
+
+    juju wait-for model terraform --query="forEach(units, unit => (unit.workload-status == 'blocked' && unit.workload-message == 'Invalid config: host value missing'))"
