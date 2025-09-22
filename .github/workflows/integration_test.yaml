@@ -19,6 +19,6 @@ jobs:
       modules: '["test_charm.py", "test_scaling.py", "test_vault.py", "test_postgres_db.py"]'
       juju-channel: 3.6/stable
       self-hosted-runner: false
-      upload-image: "registry"
+      upload-image: "artifact"
       trivy-exit-code: '0'
       pre-run-script: .github/scripts/init-vault.sh
