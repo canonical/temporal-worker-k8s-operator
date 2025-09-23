@@ -10,6 +10,9 @@ requires-python = ">=3.10,<3.13"
 # Runtime deps
 charm = [
     "ops==2.21.1",
+    "hvac==2.3.0",
+    "cosl==0.0.6",
+    "pytest-interface-tester==3.3.1",
 ]
 
 # Unit test deps
