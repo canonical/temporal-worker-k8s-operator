@@ -1,7 +1,9 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import datetime
 import json
+import unittest.mock
 
 import ops.testing
 import pytest
@@ -23,6 +25,31 @@ def pytest_configure(config):  # noqa: DCO020
 @pytest.fixture
 def temporal_worker_k8s_charm(monkeypatch):
     yield TemporalWorkerK8SOperatorCharm
+
+
+@pytest.fixture(autouse=True)
+def global_patches():
+    with unittest.mock.patch("ops.Container.exists", return_value=True) as mock_exists:
+        yield mock_exists
+
+
+@pytest.fixture(scope="function")
+def pebble_change_error():
+    return ops.pebble.ChangeError(
+        err="test-change-error",
+        change=ops.pebble.Change(
+            id=ops.pebble.ChangeID("test-id"),
+            kind="test",
+            summary="test change error",
+            status="none",
+            tasks=[],
+            ready=True,
+            err=None,
+            spawn_time=datetime.datetime.now(),
+            ready_time=None,
+            data={},
+        ),
+    )
 
 
 @pytest.fixture(scope="function")
