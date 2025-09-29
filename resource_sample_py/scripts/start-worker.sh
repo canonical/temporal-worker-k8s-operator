@@ -3,4 +3,4 @@
 # See LICENSE file for licensing details.
 
 # update 'resource_sample' accordingly
-python3 app/resource_sample/worker.py
+python3 /app/resource_sample/worker.py

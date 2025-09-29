@@ -13,7 +13,7 @@ services:
     override: replace
     summary: "temporal worker"
     startup: disabled
-    command: "./app/scripts/start-worker.sh"
+    command: "/app/scripts/start-worker.sh"
     environment:
       TEMPORAL_HOST: localhost:7233
       TEMPORAL_NAMESPACE: default
