@@ -179,6 +179,23 @@ def test_blocked_on_missing_host(context, state):
     assert state_out.unit_status == ops.BlockedStatus("Invalid config: host value missing")
 
 
+def test_image_without_entrypoint(context, state, temporal_worker_container):
+    with unittest.mock.patch("ops.Container.exists", return_value=False):
+        state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+
+    assert state_out.unit_status == ops.BlockedStatus("Please refresh the charm with a valid worker image")
+
+
+def test_error_replanning_pebble_plan(context, state, temporal_worker_container, pebble_change_error):
+    with unittest.mock.patch("ops.Container.replan", side_effect=pebble_change_error):
+        state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+        state_out = context.run(context.on.config_changed(), state_out)
+
+    assert state_out.unit_status == ops.BlockedStatus(
+        "Failed to start pebble services - please consult logs for further details"
+    )
+
+
 def test_ready(context, state, temporal_worker_container, namespace, queue):
     state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
     state_out = context.run(context.on.config_changed(), state_out)
@@ -188,7 +205,7 @@ def test_ready(context, state, temporal_worker_container, namespace, queue):
             "services": {
                 "temporal-worker": {
                     "summary": "temporal worker",
-                    "command": "./app/scripts/start-worker.sh",
+                    "command": "/app/scripts/start-worker.sh",
                     "startup": "enabled",
                     "override": "replace",
                     "environment": WANT_ENV,
@@ -249,7 +266,7 @@ def test_auth_juju_secret(
             "services": {
                 "temporal-worker": {
                     "summary": "temporal worker",
-                    "command": "./app/scripts/start-worker.sh",
+                    "command": "/app/scripts/start-worker.sh",
                     "startup": "enabled",
                     "override": "replace",
                     "environment": expected_env,
@@ -278,7 +295,7 @@ def test_vault_relation(context, state, temporal_worker_container):
             "services": {
                 "temporal-worker": {
                     "summary": "temporal worker",
-                    "command": "./app/scripts/start-worker.sh",
+                    "command": "/app/scripts/start-worker.sh",
                     "startup": "enabled",
                     "override": "replace",
                     "environment": WANT_ENV,
@@ -396,7 +413,7 @@ def test_valid_environment_config(context, state, temporal_worker_container, con
                 "services": {
                     "temporal-worker": {
                         "summary": "temporal worker",
-                        "command": "./app/scripts/start-worker.sh",
+                        "command": "/app/scripts/start-worker.sh",
                         "startup": "enabled",
                         "override": "replace",
                         "environment": {
@@ -441,7 +458,7 @@ def test_db_relation(context, state, temporal_worker_container):
             "services": {
                 "temporal-worker": {
                     "summary": "temporal worker",
-                    "command": "./app/scripts/start-worker.sh",
+                    "command": "/app/scripts/start-worker.sh",
                     "startup": "enabled",
                     "override": "replace",
                     "environment": {
