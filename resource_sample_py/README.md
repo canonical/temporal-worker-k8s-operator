@@ -5,7 +5,7 @@ This is a sample
 that can be used to build Python-based Temporal workflows.
 
 To work with the charm, the root directory must include a
-`scripts/start-worker.sh` file, with a command that would start your
+`/app/scripts/start-worker.sh` file, with a command that would start your
 asynchronous Temporal worker.
 
 To test the worker locally, export the relevant environment variables found in

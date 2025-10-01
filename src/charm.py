@@ -320,6 +320,13 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             self.unit.status = WaitingStatus("waiting for pebble api")
             return
 
+        if not container.exists("/app/scripts/start-worker.sh"):
+            logger.error(
+                "The workload container does not have the expected entrypoint script. Please refresh the charm with another valid image"
+            )
+            self.unit.status = BlockedStatus("Please refresh the charm with a valid worker image")
+            return
+
         context = {}
         auth_config = {}
         try:
@@ -385,7 +392,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             "services": {
                 self.name: {
                     "summary": "temporal worker",
-                    "command": "./app/scripts/start-worker.sh",
+                    "command": "/app/scripts/start-worker.sh",
                     "startup": "enabled",
                     "override": "replace",
                     "environment": context,
@@ -394,7 +401,15 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         }
 
         container.add_layer(self.name, pebble_layer, combine=True)
-        container.replan()
+
+        try:
+            container.replan()
+        except pebble.ChangeError as e:
+            logger.exception(f"Failed to replan pebble services: {e}")
+            self.unit.status = BlockedStatus(
+                "Failed to start pebble services - please consult logs for further details"
+            )
+            return
 
         self.unit.status = MaintenanceStatus("replanning application")
 
