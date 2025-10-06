@@ -3,20 +3,22 @@ name: Integration tests
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 on:
   pull_request:
   workflow_call:
 
 jobs:
   integration-tests:
-    uses: canonical/operator-workflows/.github/workflows/integration_test.yaml@main
+    uses: arjun11-malik/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
     with:
-      channel: 1.25-strict/stable
+      provider: k8s
+      use-canonical-k8s: true
+      channel: 1.33-classic/stable
+      charmcraft-channel: latest/candidate
       modules: '["test_charm.py", "test_scaling.py", "test_vault.py", "test_postgres_db.py"]'
       juju-channel: 3.6/stable
       self-hosted-runner: false
-      microk8s-addons: "dns ingress rbac storage metallb:10.15.119.2-10.15.119.4 registry"
       upload-image: "artifact"
       trivy-exit-code: '0'
+      pre-run-script: .github/scripts/setup-artifact-import.sh
