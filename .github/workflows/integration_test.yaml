@@ -9,7 +9,7 @@ on:
 
 jobs:
   integration-tests:
-    uses: canonical/operator-workflows/.github/workflows/integration_test.yaml@main
+    uses: arjun11-malik/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
     with:
       provider: k8s
@@ -22,5 +22,6 @@ jobs:
       self-hosted-runner-label: large
       self-hosted-runner-arch: x64
       self-hosted-runner-image: noble
-      upload-image: "registry"
+      upload-image: "artifact"
       trivy-exit-code: '0'
+      pre-run-script: .github/scripts/setup-artifact-import.sh
