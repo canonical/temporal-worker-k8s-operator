@@ -39,6 +39,12 @@ class TestDeployment:
 
         async with ops_test.fast_forward():
             # Initialize vault
+            await ops_test.model.wait_for_idle(
+                apps=["vault-k8s"],
+                status="blocked",
+                raise_on_blocked=False,
+                timeout=1600,
+            )
             logger.info("initializing vault-k8s charm")
             vault_url = await get_unit_url(ops_test, VAULT_K8S, 0, 8200, "https")
             client = hvac.Client(url=vault_url, verify=False)
