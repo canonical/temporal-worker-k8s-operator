@@ -10,7 +10,8 @@ parts:
   charm:
     plugin: uv
     source: .
-    uv-extras: [charm]
+    uv-extras: 
+      - charm
     build-snaps:
       - astral-uv
     build-packages:
