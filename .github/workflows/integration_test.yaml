@@ -26,3 +26,4 @@ jobs:
       trivy-exit-code: '0'
       pre-run-script: .github/scripts/setup-artifact-import.sh
       tmate-debug: true
+      tmate-timeout: 120
