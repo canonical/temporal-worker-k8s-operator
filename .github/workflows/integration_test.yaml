@@ -22,6 +22,6 @@ jobs:
       self-hosted-runner-label: xlarge
       self-hosted-runner-arch: x64
       self-hosted-runner-image: noble
-      upload-image: "registry"
+      upload-image: "artifact"
       trivy-exit-code: '0'
       pre-run-script: .github/scripts/setup-artifact-import.sh
