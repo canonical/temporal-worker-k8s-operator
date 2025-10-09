@@ -19,7 +19,7 @@ jobs:
       modules: '["test_charm.py", "test_scaling.py", "test_vault.py", "test_postgres_db.py"]'
       juju-channel: 3.6/stable
       self-hosted-runner: true
-      self-hosted-runner-label: large
+      self-hosted-runner-label: xlarge
       self-hosted-runner-arch: x64
       self-hosted-runner-image: noble
       upload-image: "artifact"
