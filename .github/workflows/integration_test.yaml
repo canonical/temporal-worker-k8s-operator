@@ -25,3 +25,4 @@ jobs:
       upload-image: "artifact"
       trivy-exit-code: '0'
       pre-run-script: .github/scripts/setup-artifact-import.sh
+      test-timeout: 60
