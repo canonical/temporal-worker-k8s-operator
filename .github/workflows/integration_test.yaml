@@ -9,7 +9,7 @@ on:
 
 jobs:
   integration-tests:
-    uses: arjun11-malik/operator-workflows/.github/workflows/integration_test.yaml@main
+    uses: canonical/operator-workflows/.github/workflows/integration_test.yaml@main
     secrets: inherit
     with:
       provider: k8s
@@ -25,3 +25,4 @@ jobs:
       upload-image: "artifact"
       trivy-exit-code: '0'
       pre-run-script: .github/scripts/setup-artifact-import.sh
+      test-timeout: 35
