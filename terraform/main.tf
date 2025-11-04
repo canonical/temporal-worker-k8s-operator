@@ -24,12 +24,12 @@ resource "null_resource" "attach_image" {
     "registrypath" = var.image.image,
     "username"     = var.image.registry_username,
     "password"     = var.image.registry_password,
-})}" > temporal_worker_image.yaml
+})}" > ./temporal_worker_image.yaml
 
       juju switch ${var.model}
-      juju attach-resource ${var.app_name} temporal-worker-image=temporal_worker_image.yaml
+      juju attach-resource ${var.app_name} temporal-worker-image=./temporal_worker_image.yaml
 
-      rm temporal_worker_image.yaml
+      rm ./temporal_worker_image.yaml
     EOT
 }
 
