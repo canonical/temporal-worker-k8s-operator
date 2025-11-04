@@ -26,6 +26,7 @@ resource "null_resource" "attach_image" {
     "password"     = var.image.registry_password,
 })}" > temporal_worker_image.yaml
 
+      juju switch ${var.model}
       juju attach-resource ${var.app_name} temporal-worker-image=temporal_worker_image.yaml
 
       rm temporal_worker_image.yaml
