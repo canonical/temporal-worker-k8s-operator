@@ -11,12 +11,12 @@ resource "juju_application" "temporal_worker_k8s" {
   constraints = var.constraints
   config      = var.config
 
-  registry_credentials = {
-    "${var.image.image_repository}" = {
-      username = var.image.registry_username
-      password = var.image.registry_password
-    }
-  }
+#  registry_credentials = {
+#    "${var.image.image_repository}" = {
+#      username = var.image.registry_username
+#      password = var.image.registry_password
+#    }
+#  }
 
   units = var.units
 }
