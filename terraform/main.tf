@@ -1,6 +1,6 @@
 resource "juju_application" "temporal_worker_k8s" {
   name  = var.app_name
-  model = var.model
+  model_uuid = var.model_uuid
 
   charm {
     name     = "temporal-worker-k8s"
@@ -11,31 +11,12 @@ resource "juju_application" "temporal_worker_k8s" {
   constraints = var.constraints
   config      = var.config
 
+  registry_credentials = {
+    "${var.image.image_repository}" = {
+      username = var.image.registry_username
+      password = var.image.registry_password
+    }
+  }
+
   units = var.units
-}
-
-
-resource "null_resource" "attach_image" {
-  provisioner "local-exec" {
-    # Needed since juju_application resource does not support resource map to specify registry creds
-    # Refactor once https://github.com/juju/terraform-provider-juju/issues/620 resolved
-    command = <<EOT
-      echo "${yamlencode({
-    "registrypath" = var.image.image,
-    "username"     = var.image.registry_username,
-    "password"     = var.image.registry_password,
-})}" > ./temporal_worker_image.yaml
-
-      juju switch ${var.model}
-      juju attach-resource ${var.app_name} temporal-worker-image=./temporal_worker_image.yaml
-
-      rm ./temporal_worker_image.yaml
-    EOT
-}
-
-depends_on = [resource.juju_application.temporal_worker_k8s]
-
-triggers = {
-  image = jsonencode(var.image)
-}
 }
