@@ -11,6 +11,10 @@ resource "juju_application" "temporal_worker_k8s" {
   constraints = var.constraints
   config      = var.config
 
+  resources = {
+    "temporal-worker-image": var.image.image
+  }
+
 #  registry_credentials = {
 #    "${var.image.image_repository}" = {
 #      username = var.image.registry_username
