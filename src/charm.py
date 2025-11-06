@@ -31,6 +31,7 @@ from literals import (
     VALID_LOG_LEVELS,
 )
 from log import log_event_handler
+from relations.host_info import HostInfoRequirer
 from relations.postgresql import Postgresql
 from relations.vault import VAULT_NONCE_SECRET_LABEL, VaultRelation
 from relations.worker_consumer import WorkerConsumer
@@ -64,8 +65,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self.framework.observe(self.on.update_status, self._on_update_status)
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.secret_changed, self._on_secret_changed)
-        self.framework.observe(self.on.host_info_relation_joined, self._on_host_info_relation_changed)
-        self.framework.observe(self.on.host_info_relation_changed, self._on_host_info_relation_changed)
 
         # Vault
         self.vault = vault_kv.VaultKvRequires(
@@ -92,6 +91,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         # Worker Consumer
         self.worker_consumer = WorkerConsumer(self)
+        self.host_info = HostInfoRequirer(self)
+        self.framework.observe(self.host_info.on.host_info_available, self._update)
 
     @log_event_handler(logger)
     def _on_install(self, event):
@@ -186,14 +187,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self.unit.status = ActiveStatus(
             f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
         )
-    @log_event_handler(logger)
-    def _on_host_info_relation_changed(self, event):
-        if not self._state.is_ready():
-            event.defer()
-            return
-        self.unit.status = WaitingStatus(f"Handling {event.relation.name} change")
-        self._state.host = event.relation.data[event.app]["host"]
-        self._update(event)
 
     def _validate_pebble_plan(self, container):
         """Validate Temporal worker pebble plan.
@@ -322,6 +315,9 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if self.model.get_relation("database") and not self.config.get("db-name"):
             raise ValueError("Invalid config: db name value missing")
 
+        if self.model.get_relation("host-info") is None:
+            raise ValueError("host-info relation not established")
+
     def _update(self, event):  # noqa: C901
         """Update the Temporal worker configuration and replan its execution.
 
@@ -367,10 +363,13 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             if value:
                 context.update({key: value})
 
+        if self.config.get("host"):
+            logger.warning("The 'host' config option is deprecated. Please use the host-info relation instead.")
+
         context.update(
             {
-                "TWC_HOST": self._state.host,
-                "TEMPORAL_HOST": self._state.host,
+                "TWC_HOST": f"{self.host_info.host}:{self.host_info.port}",
+                "TEMPORAL_HOST": f"{self.host_info.host}:{self.host_info.port}",
             }
         )
 
@@ -378,7 +377,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             {
                 convert_env_var(key, prefix="TWC_"): value
                 for key, value in self.config.items()
-                if key not in ["environment", "auth-secret-id"]
+                if key not in ["environment", "auth-secret-id", "host"]  # host is deprecated
             }
         )
 
@@ -386,7 +385,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             {
                 convert_env_var(key, prefix="TEMPORAL_"): value
                 for key, value in self.config.items()
-                if key not in ["environment", "auth-secret-id"]
+                if key not in ["environment", "auth-secret-id", "host"]  # host is deprecated
             }
         )
 

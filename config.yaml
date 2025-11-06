@@ -16,6 +16,11 @@ options:
     default: "info"
     type: string
 
+  host:
+    description: "[DEPRECATED] The hostname of the Temporal server."
+    default: ""
+    type: string
+
   namespace:
     description: Temporal namespace the worker should connect to.
     default: ""

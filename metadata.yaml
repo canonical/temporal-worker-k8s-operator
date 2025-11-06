@@ -55,7 +55,7 @@ provides:
     interface: grafana_dashboard
     optional: true
   worker-consumer:
-    interface: worker_consumer
+    interface: worker-consumer
 
 requires:
   logging:
@@ -71,5 +71,5 @@ requires:
     optional: true
     limit: 1
   host-info:
-    interface: host_info
+    interface: host-info
     limit: 1
