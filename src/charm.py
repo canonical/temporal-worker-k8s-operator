@@ -34,7 +34,7 @@ from log import log_event_handler
 from relations.host_info import HostInfoRequirer
 from relations.postgresql import Postgresql
 from relations.vault import VAULT_NONCE_SECRET_LABEL, VaultRelation
-from relations.worker_consumer import WorkerConsumer
+from relations.worker_consumer import WorkerConsumerProvider
 from state import State
 from vault.actions import VaultActions
 
@@ -90,7 +90,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
 
         # Worker Consumer
-        self.worker_consumer = WorkerConsumer(self)
+        self.worker_consumer = WorkerConsumerProvider(self)
         self.host_info = HostInfoRequirer(self)
         self.framework.observe(self.host_info.on.host_info_available, self._update)
 
