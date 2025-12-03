@@ -15,6 +15,7 @@ from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.temporal_k8s.v0.temporal_host_info import TemporalHostInfoRequirer
 from charms.vault_k8s.v0 import vault_kv
 from ops import main, pebble
 from ops.charm import CharmBase
@@ -31,10 +32,8 @@ from literals import (
     VALID_LOG_LEVELS,
 )
 from log import log_event_handler
-from relations.host_info import TemporalHostInfoRequirer
 from relations.postgresql import Postgresql
 from relations.vault import VAULT_NONCE_SECRET_LABEL, VaultRelation
-from relations.worker_consumer import TemporalWorkerConsumerProvider
 from state import State
 from vault.actions import VaultActions
 
@@ -89,8 +88,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         # Grafana
         self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
 
-        # Worker Consumer
-        self.worker_consumer = TemporalWorkerConsumerProvider(self)
+        # self.worker_consumer = TemporalWorkerConsumerProvider(self)
         self.host_info = TemporalHostInfoRequirer(self)
         self.framework.observe(self.host_info.on.temporal_host_info_available, self._update)
 
@@ -315,8 +313,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if self.model.get_relation("database") and not self.config.get("db-name"):
             raise ValueError("Invalid config: db name value missing")
 
-        if self.model.get_relation("host-info") is None:
-            raise ValueError("host-info relation not established")
 
     def _update(self, event):  # noqa: C901
         """Update the Temporal worker configuration and replan its execution.
@@ -363,8 +359,15 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             if value:
                 context.update({key: value})
 
+        host = None
         if self.config.get("host"):
-            logger.warning("The 'host' config option is deprecated. Please use the host-info relation instead.")
+            logger.warning("The 'host' config option is deprecated. Please use the temporal-host-info relation instead.")
+            host = self.config.get("host")
+        else:
+            host = f"{self.host_info.host}:{self.host_info.port}"
+        if host is None:
+            self.unit.status = BlockedStatus("temporal-host-info relation not established")
+            return
 
         context.update(
             {
@@ -377,7 +380,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             {
                 convert_env_var(key, prefix="TWC_"): value
                 for key, value in self.config.items()
-                if key not in ["environment", "auth-secret-id", "host"]  # host is deprecated
+                if key not in ["environment", "auth-secret-id", "host"]
             }
         )
 
@@ -385,7 +388,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             {
                 convert_env_var(key, prefix="TEMPORAL_"): value
                 for key, value in self.config.items()
-                if key not in ["environment", "auth-secret-id", "host"]  # host is deprecated
+                if key not in ["environment", "auth-secret-id", "host"]
             }
         )
 
