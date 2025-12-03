@@ -363,16 +363,16 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if self.config.get("host"):
             logger.warning("The 'host' config option is deprecated. Please use the temporal-host-info relation instead.")
             host = self.config.get("host")
-        else:
+        elif self.host_info.host and self.host_info.port:
             host = f"{self.host_info.host}:{self.host_info.port}"
-        if host is None:
+        else:
             self.unit.status = BlockedStatus("temporal-host-info relation not established")
             return
 
         context.update(
             {
-                "TWC_HOST": f"{self.host_info.host}:{self.host_info.port}",
-                "TEMPORAL_HOST": f"{self.host_info.host}:{self.host_info.port}",
+                "TWC_HOST": host,
+                "TEMPORAL_HOST": host,
             }
         )
 
