@@ -16,6 +16,7 @@ from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.temporal_k8s.v0.temporal_host_info import TemporalHostInfoRequirer
+from charms.temporal_worker_k8s.v0.temporal_worker_consumer import TemporalWorkerConsumerProvider
 from charms.vault_k8s.v0 import vault_kv
 from ops import main, pebble
 from ops.charm import CharmBase
@@ -88,7 +89,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         # Grafana
         self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
 
-        # self.worker_consumer = TemporalWorkerConsumerProvider(self)
+        self.worker_consumer = TemporalWorkerConsumerProvider(self)
         self.host_info = TemporalHostInfoRequirer(self)
         self.framework.observe(self.host_info.on.temporal_host_info_available, self._update)
 
