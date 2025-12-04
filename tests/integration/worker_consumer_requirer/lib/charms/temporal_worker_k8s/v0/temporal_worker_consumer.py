@@ -1,0 +1,1 @@
+../../../../../../../lib/charms/temporal_worker_k8s/v0/temporal_worker_consumer.py
