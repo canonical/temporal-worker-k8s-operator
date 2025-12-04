@@ -92,6 +92,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self.worker_consumer = TemporalWorkerConsumerProvider(self)
         self.host_info = TemporalHostInfoRequirer(self)
         self.framework.observe(self.host_info.on.temporal_host_info_available, self._update)
+        self.framework.observe(self.on.temporal_host_info_relation_broken, self._update)
 
     @log_event_handler(logger)
     def _on_install(self, event):
