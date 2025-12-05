@@ -36,11 +36,14 @@ variable "constraints" {
 variable "image" {
   type = object({
     image             = string
-    image_repository = optional(string, "")
+    image_repository  = optional(string, "")
     registry_username = optional(string, "")
     registry_password = optional(string, "")
   })
   description = "Details of the worker image"
+  default = {
+    image = ""
+  }
 }
 
 variable "config" {

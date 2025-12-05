@@ -1,5 +1,5 @@
 resource "juju_application" "temporal_worker_k8s" {
-  name  = var.app_name
+  name       = var.app_name
   model_uuid = var.model_uuid
 
   charm {
@@ -11,16 +11,16 @@ resource "juju_application" "temporal_worker_k8s" {
   constraints = var.constraints
   config      = var.config
 
-  resources = {
-    "temporal-worker-image": var.image.image
-  }
+  resources = var.image.image != "" ? {
+    "temporal-worker-image" = var.image.image
+  } : {}
 
-#  registry_credentials = {
-#    "${var.image.image_repository}" = {
-#      username = var.image.registry_username
-#      password = var.image.registry_password
-#    }
-#  }
+  #  registry_credentials = {
+  #    "${var.image.image_repository}" = {
+  #      username = var.image.registry_username
+  #      password = var.image.registry_password
+  #    }
+  #  }
 
   units = var.units
 }

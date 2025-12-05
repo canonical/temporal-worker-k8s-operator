@@ -38,7 +38,10 @@ destroy-model:
 
 [private]
 add-model: (destroy-model)
+    #!/usr/bin/bash
     juju add-model terraform
+    MODEL_UUID=$(juju show-model terraform --format=json | jq -r '.terraform["model-uuid"]')
+    sed -i "s|model_uuid = \".*\"|model_uuid = \"${MODEL_UUID}\"|" test/test.tfvars
 
 # Run terraform format
 fmt: (initialize)
