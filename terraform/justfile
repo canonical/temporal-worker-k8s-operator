@@ -38,7 +38,6 @@ destroy-model:
 
 [private]
 add-model: (destroy-model)
-    #!/usr/bin/bash
     juju add-model terraform
 
 # Run terraform format
@@ -55,7 +54,7 @@ lint:
 
 # Apply the terraform plan with the provided variables file
 apply variables_file: (initialize)
-    terraform apply -auto-approve -var-file="${variables_file}" 
+    terraform apply -auto-approve -var-file="${variables_file}"
 
 # Destroy the terraform plan with the provided variables file
 destroy variables_file:
@@ -70,7 +69,7 @@ test: (build-and-push-image)
     trap 'just destroy "./test/test.tfvars"' EXIT
 
     just add-model
-    
+
     just apply "./test/test.tfvars" 
 
     juju wait-for model terraform --query="forEach(units, unit => (unit.workload-status == 'blocked' && unit.workload-message == 'Invalid config: host value missing'))"
