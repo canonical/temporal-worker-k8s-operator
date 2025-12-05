@@ -70,6 +70,6 @@ test: (build-and-push-image)
 
     just add-model
 
-    just apply "./test/test.tfvars" 
+    just apply "./test/test.tfvars"
 
     juju wait-for model terraform --query="forEach(units, unit => (unit.workload-status == 'blocked' && unit.workload-message == 'Invalid config: host value missing'))"

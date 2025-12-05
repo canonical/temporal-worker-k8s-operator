@@ -4,7 +4,7 @@ data "juju_model" "terraform" {
 }
 
 resource "juju_application" "temporal_worker_k8s" {
-  name       = var.app_name
+  name = var.app_name
   model_uuid = data.juju_model.terraform.uuid
 
   charm {
