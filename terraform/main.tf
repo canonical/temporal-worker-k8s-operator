@@ -1,10 +1,10 @@
 data "juju_model" "terraform" {
-  name = "terraform"
+  name  = "terraform"
   owner = "admin"
 }
 
 resource "juju_application" "temporal_worker_k8s" {
-  name = var.app_name
+  name       = var.app_name
   model_uuid = data.juju_model.terraform.uuid
 
   charm {
@@ -21,10 +21,10 @@ resource "juju_application" "temporal_worker_k8s" {
   } : {}
 
   registry_credentials = {
-      var.image.image_repository = {
-        username = var.image.registry_username
-        password = var.image.registry_password
-      }
+    (var.image.image_repository) = {
+      username = var.image.registry_username
+      password = var.image.registry_password
+    }
   }
 
   units = var.units
