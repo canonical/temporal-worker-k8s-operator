@@ -41,9 +41,6 @@ variable "image" {
     registry_password = optional(string, "")
   })
   description = "Details of the worker image"
-  default = {
-    image = ""
-  }
 }
 
 variable "config" {

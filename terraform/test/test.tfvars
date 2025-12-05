@@ -1,4 +1,4 @@
-model_uuid = "00000000-0000-0000-0000-000000000000"
+model_uuid = "10c66c3e-c119-4600-8ff3-86a0c472b54a"
 image = {
   image = "localhost:5000/temporal-worker:test-terraform"
 }
