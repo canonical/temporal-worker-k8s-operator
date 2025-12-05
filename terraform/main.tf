@@ -21,7 +21,7 @@ resource "juju_application" "temporal_worker_k8s" {
   } : {}
 
   registry_credentials = {
-      "${var.image.image_repository}" = {
+      var.image.image_repository = {
         username = var.image.registry_username
         password = var.image.registry_password
       }
