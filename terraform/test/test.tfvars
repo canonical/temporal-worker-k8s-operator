@@ -1,4 +1,3 @@
-model = "terraform"
 image = {
   image = "localhost:5000/temporal-worker:test-terraform"
 }

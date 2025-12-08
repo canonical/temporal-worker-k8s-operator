@@ -38,7 +38,20 @@ destroy-model:
 
 [private]
 add-model: (destroy-model)
+    #!/usr/bin/bash
     juju add-model terraform
+
+    MODEL_UUID=$(juju show-model terraform --format=json | jq -r '.terraform["model-uuid"]')
+    echo "model_uuid = \"${MODEL_UUID}\"" >> "./test/test.tfvars"
+
+[private]
+validate_test_tfvars variables_file="test/test.tfvars":
+    #!/usr/bin/bash
+    MODEL_UUID=$(grep '^model_uuid' "${variables_file}" | awk -F '"' '{print $2}')
+
+    if ! juju show-model "${MODEL_UUID}" >/dev/null 2>&1; then
+        exit 1
+    fi
 
 # Run terraform format
 fmt: (initialize)
@@ -70,6 +83,8 @@ test: (build-and-push-image)
 
     just add-model
 
+    just validate_test_tfvars "./test/test.tfvars"
+    
     just apply "./test/test.tfvars"
 
     juju wait-for model terraform --query="forEach(units, unit => (unit.workload-status == 'blocked' && unit.workload-message == 'Invalid config: host value missing'))"
