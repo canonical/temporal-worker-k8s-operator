@@ -10,9 +10,9 @@ variable "units" {
   default     = 1
 }
 
-variable "model" {
+variable "model_uuid" {
   type        = string
-  description = "Juju model where the application is to be deployed"
+  description = "UUID of Juju model where the application is to be deployed"
 }
 
 variable "revision" {
@@ -36,6 +36,7 @@ variable "constraints" {
 variable "image" {
   type = object({
     image             = string
+    image_repository  = optional(string, "")
     registry_username = optional(string, "")
     registry_password = optional(string, "")
   })
