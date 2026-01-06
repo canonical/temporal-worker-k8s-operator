@@ -50,12 +50,15 @@ resources:
 provides:
   metrics-endpoint:
     interface: prometheus_scrape
+    optional: true
   grafana-dashboard:
     interface: grafana_dashboard
+    optional: true
 
 requires:
   logging:
     interface: loki_push_api
+    optional: true
     limit: 1
   vault:
     interface: vault-kv
