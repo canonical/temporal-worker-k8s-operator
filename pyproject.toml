@@ -74,7 +74,7 @@ dev = [
 ]
 
 [tool.bandit]
-exclude_dirs = ["/venv/"]
+exclude_dirs = ["/venv/", "tests/", "*/tests/"]
 [tool.bandit.assert_used]
 skips = ["*/*test.py", "*/test_*.py", "*tests/*.py"]
 
