@@ -1,5 +1,12 @@
-# Copyright 2025 Canonical Ltd.
+# Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
+
+"""Charm library for the temporal-host-info relation interface.
+
+This library provides the TemporalHostInfoProvider and TemporalHostInfoRequirer
+classes for charms that need to share Temporal server connection details
+(host and port) over a Juju relation.
+"""
 
 import logging
 
@@ -7,13 +14,15 @@ from ops import (
     ConfigChangedEvent,
     Handle,
     LeaderElectedEvent,
+    Object,
+    RelationBrokenEvent,
     RelationChangedEvent,
     RelationJoinedEvent,
-    framework,
+    TooManyRelatedAppsError,
 )
 from ops.charm import CharmBase
 from ops.framework import EventBase, EventSource, ObjectEvents
-from ops.model import ActiveStatus, Relation, WaitingStatus
+from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
 LIBID = "024db27b47e546628c9ed7f26ddad6c8"
@@ -30,7 +39,7 @@ RELATION_NAME = "temporal-host-info"
 logger = logging.getLogger(__name__)
 
 
-class TemporalHostInfoProvider(framework.Object):
+class TemporalHostInfoProvider(Object):
     """A class for managing the temporal-host-info interface provider."""
 
     def __init__(self, charm: CharmBase, port: int):
@@ -56,28 +65,49 @@ class TemporalHostInfoProvider(framework.Object):
         :param: event: The relation event that triggered this handler.
         :type event: RelationChangedEvent | RelationJoinedEvent
         """
-        logger.info("Handling temporal-host-info relation event")
-        if self.charm.unit.is_leader() and "frontend" in str(self.charm.config["services"]):
-            host = str(self.charm.config["external-hostname"])
-            if binding := self.charm.model.get_binding(event.relation):
-                host = host or str(binding.network.bind_address)
-            event.relation.data[self.charm.app]["host"] = host
-            event.relation.data[self.charm.app]["port"] = str(self.port)
+        logger.debug("Handling temporal-host-info relation event")
+        if not self.charm.unit.is_leader() or "frontend" not in str(self.charm.config["services"]):
+            return
+        host = self._resolve_host(event.relation)
+        app_data = event.relation.data[self.charm.app]
+        app_data["host"] = host
+        app_data["port"] = str(self.port)
 
     def _on_config_changed(self, event: ConfigChangedEvent | LeaderElectedEvent):
-        """Update relation data on config change."""
-        logger.info("Config changed, updating temporal-host-info relation data")
-        if self.charm.unit.is_leader() and "frontend" in str(self.charm.config["services"]):
-            host = str(self.charm.config["external-hostname"])
-            for relation in self.charm.model.relations.get("temporal-host-info", []):
-                if binding := self.charm.model.get_binding(relation):
-                    host = host or str(binding.network.bind_address)
-                relation.data[self.charm.app]["host"] = host
-                relation.data[self.charm.app]["port"] = str(self.port)
+        """Update relation data on config change or leader election.
+
+        :param: event: The event that triggered this handler.
+        :type event: ConfigChangedEvent | LeaderElectedEvent
+        """
+        logger.debug("Config changed, updating temporal-host-info relation data")
+        if not self.charm.unit.is_leader() or "frontend" not in str(self.charm.config["services"]):
+            return
+        for relation in self.charm.model.relations.get(RELATION_NAME, []):
+            host = self._resolve_host(relation)
+            app_data = relation.data[self.charm.app]
+            app_data["host"] = host
+            app_data["port"] = str(self.port)
+
+    def _resolve_host(self, relation: Relation) -> str:
+        """Resolve host to external-hostname or relation binding address.
+
+        :param: relation: The relation to resolve the host for.
+        :type relation: Relation
+        :returns: The resolved host string.
+        :rtype: str
+        """
+        host = str(self.charm.config["external-hostname"])
+        if not host:
+            binding = self.charm.model.get_binding(relation)
+            if binding:
+                host = str(binding.network.bind_address)
+        if not host:
+            logger.warning("Could not resolve host: external-hostname is not set and no binding address is available")
+        return host
 
 
-class TemporalHostInfoRelationReadyEvent(EventBase):
-    """Event emitted when temporal-host-info relation is ready."""
+class TemporalHostInfoChangedEvent(EventBase):
+    """Event emitted when temporal-host-info relation data changes."""
 
     def __init__(
         self,
@@ -105,10 +135,12 @@ class TemporalHostInfoRelationReadyEvent(EventBase):
 class TemporalHostInfoRequirerCharmEvents(ObjectEvents):
     """List of events that the requirer charm can leverage."""
 
-    temporal_host_info_available = EventSource(TemporalHostInfoRelationReadyEvent)
+    temporal_host_info_changed = EventSource(TemporalHostInfoChangedEvent)
+    # No data to snapshot/restore here, so we can just use EventBase
+    temporal_host_info_unavailable = EventSource(EventBase)
 
 
-class TemporalHostInfoRequirer(framework.Object):
+class TemporalHostInfoRequirer(Object):
     """A class for managing the temporal-host-info interface requirer.
 
     Track this relation in your charm with:
@@ -117,9 +149,9 @@ class TemporalHostInfoRequirer(framework.Object):
 
         self.host_info = TemporalHostInfoRequirer(self)
         # update container with new host info
-        framework.observe(self.host_info.on.temporal_host_info_available, self._update)
+        framework.observe(self.host_info.on.temporal_host_info_changed, self._on_host_info_changed)
 
-        def _update(self, event):
+        def _on_host_info_changed(self, event):
             host = self.host_info.host
             port = self.host_info.port
     """
@@ -127,51 +159,62 @@ class TemporalHostInfoRequirer(framework.Object):
     on = TemporalHostInfoRequirerCharmEvents()  # type: ignore[reportAssignmentType]
 
     def __init__(self, charm: CharmBase):
-        """Create a new instance of the TemporalHostInfoProvider class.
+        """Create a new instance of the TemporalHostInfoRequirer class.
 
         :param: charm: The charm that is using this interface.
         :type charm: CharmBase
         """
         super().__init__(charm, "temporal_host_info_requirer")
         self.charm = charm
+        try:
+            self.charm.model.get_relation(RELATION_NAME)
+        except TooManyRelatedAppsError:
+            raise RuntimeError(f"Multiple {RELATION_NAME} relations are not supported for requirers.")
         charm.framework.observe(charm.on[RELATION_NAME].relation_joined, self._on_host_info_relation_changed)
         charm.framework.observe(charm.on[RELATION_NAME].relation_changed, self._on_host_info_relation_changed)
+        charm.framework.observe(charm.on[RELATION_NAME].relation_broken, self._on_host_info_relation_broken)
 
     @property
-    def relations(self) -> list[Relation]:
-        """Return the relations for this interface."""
-        return self.charm.model.relations.get(RELATION_NAME, [])
+    def relation(self) -> Relation | None:
+        """Return the relation for this interface, if any."""
+        return self.charm.model.get_relation(RELATION_NAME)
 
     @property
     def host(self) -> str | None:
         """Return the host from the relation data."""
-        for relation in self.relations:
-            if relation and relation.app:
-                return relation.data[relation.app].get("host", None)
+        relation = self.relation
+        if relation and relation.app:
+            return relation.data[relation.app].get("host", None)
         return None
 
     @property
     def port(self) -> int | None:
         """Return the port from the relation data."""
-        for relation in self.relations:
-            if relation and relation.app:
-                port_str = relation.data[relation.app].get("port", None)
-                if port_str is not None:
-                    return int(port_str)
+        relation = self.relation
+        if relation and relation.app:
+            port_str = relation.data[relation.app].get("port", None)
+            if port_str is not None:
+                return int(port_str)
         return None
 
-    def _on_host_info_relation_changed(self, event: RelationChangedEvent):
+    def _on_host_info_relation_broken(self, event: RelationBrokenEvent):
+        """Handle the relation broken event.
+
+        :param: event: The relation broken event that triggered this handler.
+        :type event: RelationBrokenEvent
+        """
+        self.on.temporal_host_info_unavailable.emit()
+
+    def _on_host_info_relation_changed(self, event: RelationChangedEvent | RelationJoinedEvent):
         """Handle the relation joined/changed events.
 
         :param: event: The relation event that triggered this handler.
         :type event: RelationChangedEvent | RelationJoinedEvent
         """
+        app_data = event.relation.data[event.relation.app]
         try:
-            host = event.relation.data[event.relation.app]["host"]
-            port = int(event.relation.data[event.relation.app]["port"])
+            host = app_data["host"]
+            port = int(app_data["port"])
         except KeyError:
-            self.charm.unit.status = WaitingStatus("Waiting for temporal-host-info provider")
-            event.defer()
             return
-        self.charm.unit.status = ActiveStatus()
-        self.on.temporal_host_info_available.emit(host=host, port=port)
+        self.on.temporal_host_info_changed.emit(host=host, port=port)

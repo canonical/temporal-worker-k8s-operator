@@ -16,7 +16,9 @@ from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.temporal_k8s.v0.temporal_host_info import TemporalHostInfoRequirer
-from charms.temporal_worker_k8s.v0.temporal_worker_consumer import TemporalWorkerConsumerProvider
+from charms.temporal_worker_k8s.v0.temporal_worker_consumer import (
+    TemporalWorkerConsumerProvider,
+)
 from charms.vault_k8s.v0 import vault_kv
 from ops import main, pebble
 from ops.charm import CharmBase
@@ -91,8 +93,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         self.worker_consumer = TemporalWorkerConsumerProvider(self)
         self.host_info = TemporalHostInfoRequirer(self)
-        self.framework.observe(self.host_info.on.temporal_host_info_available, self._update)
-        self.framework.observe(self.on.temporal_host_info_relation_broken, self._update)
+        self.framework.observe(self.host_info.on.temporal_host_info_changed, self._update)
+        self.framework.observe(self.host_info.on.temporal_host_info_unavailable, self._update)
 
     @log_event_handler(logger)
     def _on_install(self, event):
@@ -315,7 +317,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if self.model.get_relation("database") and not self.config.get("db-name"):
             raise ValueError("Invalid config: db name value missing")
 
-
     def _update(self, event):  # noqa: C901
         """Update the Temporal worker configuration and replan its execution.
 
@@ -363,7 +364,9 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         host = None
         if self.config.get("host"):
-            logger.warning("The 'host' config option is deprecated. Please use the temporal-host-info relation instead.")
+            logger.warning(
+                "The 'host' config option is deprecated. Please use the temporal-host-info relation instead."
+            )
             host = self.config.get("host")
         elif self.host_info.host and self.host_info.port:
             host = f"{self.host_info.host}:{self.host_info.port}"
