@@ -2,7 +2,12 @@ header:
   license:
     spdx-id: Apache-2.0
     copyright-owner: Canonical Ltd.
-    copyright-year: 2023
+    # Leave empty so `header fix` inserts the current year automatically.
+    copyright-year: ''
+    # Accept headers with 20xx year or 20xx-20yy range.
+    pattern: |
+      Copyright (20[0-9]{2}|20[0-9]{2}-20[0-9]{2}) Canonical Ltd\.
+      See LICENSE file for licensing details\.
     content: |
       Copyright [year] [owner]
       See LICENSE file for licensing details.
