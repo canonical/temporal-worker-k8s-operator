@@ -194,6 +194,16 @@ def simple_secret():
 
 
 @pytest.fixture(scope="function")
+def encryption_key_secret():
+    return ops.testing.Secret(
+        owner="app",
+        tracked_content={
+            "encryption-key": "secret-encryption-key",
+        },
+    )
+
+
+@pytest.fixture(scope="function")
 def oidc_auth_secret_content():
     return {
         "auth-provider": "google",
