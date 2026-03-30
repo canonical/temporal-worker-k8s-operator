@@ -54,8 +54,8 @@ provides:
   grafana-dashboard:
     interface: grafana_dashboard
     optional: true
-  temporal-worker-consumer:
-    interface: temporal-worker-consumer
+  temporal-worker-info:
+    interface: temporal-worker-info
 
 requires:
   logging:

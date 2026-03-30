@@ -17,7 +17,11 @@ options:
     type: string
 
   host:
-    description: "[DEPRECATED] The hostname of the Temporal server."
+    description: |
+      [DEPRECATED] Optional fallback Temporal server address (`hostname` or `hostname:port`) when
+      `temporal-host-info` relation is unavailable.
+      Leave empty to require `temporal-host-info` only. If set, this option is deprecated and will be
+      removed in a future release; prefer the `temporal-host-info` relation as the source of truth.
     default: ""
     type: string
 

@@ -16,8 +16,8 @@ from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.temporal_k8s.v0.temporal_host_info import TemporalHostInfoRequirer
-from charms.temporal_worker_k8s.v0.temporal_worker_consumer import (
-    TemporalWorkerConsumerProvider,
+from charms.temporal_worker_k8s.v0.temporal_worker_info import (
+    TemporalWorkerInfoProvider,
 )
 from charms.vault_k8s.v0 import vault_kv
 from ops import main, pebble
@@ -91,10 +91,19 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         # Grafana
         self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
 
-        self.worker_consumer = TemporalWorkerConsumerProvider(self)
+        self.worker_info = TemporalWorkerInfoProvider(self)
         self.host_info = TemporalHostInfoRequirer(self)
         self.framework.observe(self.host_info.on.temporal_host_info_changed, self._update)
         self.framework.observe(self.host_info.on.temporal_host_info_unavailable, self._update)
+
+    @property
+    def _deprecated_host(self) -> str | None:
+        """Return configured fallback Temporal address (host[:port]), if set."""
+        raw = self.config.get("host")
+        if raw is None:
+            return None
+        stripped = str(raw).strip()
+        return stripped or None
 
     @log_event_handler(logger)
     def _on_install(self, event):
@@ -363,15 +372,23 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 context.update({key: value})
 
         host = None
-        if self.config.get("host"):
-            logger.warning(
-                "The 'host' config option is deprecated. Please use the temporal-host-info relation instead."
-            )
-            host = self.config.get("host")
-        elif self.host_info.host and self.host_info.port:
+        if self.host_info.host and self.host_info.port:
             host = f"{self.host_info.host}:{self.host_info.port}"
+            if self._deprecated_host:
+                logger.warning(
+                    "The `host` config option is deprecated and will be removed in a future release; "
+                    "prefer the `temporal-host-info` relation. Ignoring `host` while relation data is present."
+                )
+        elif self._deprecated_host:
+            logger.warning(
+                "The `host` config option is deprecated and will be removed in a future release; "
+                "prefer the `temporal-host-info` relation."
+            )
+            host = self._deprecated_host
         else:
-            self.unit.status = BlockedStatus("temporal-host-info relation not established")
+            self.unit.status = BlockedStatus(
+                "temporal-host-info relation not established; set deprecated `host` config as fallback"
+            )
             return
 
         context.update(

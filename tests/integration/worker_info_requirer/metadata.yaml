@@ -1,7 +1,7 @@
 # Copyright 2025 Canonical Ltd.
 # See LICENSE file for licensing details.
 #
-name: temporal-worker-consumer-requirer
+name: temporal-worker-info-requirer
 summary: A small charm for use in integration tests.
 description: A small charm for use in integration tests.
 
@@ -17,6 +17,6 @@ resources:
     upstream-source: ghcr.io/canonical/ubuntu-noble:latest
 
 requires:
-  temporal-worker-consumer:
-    interface: temporal-worker-consumer
+  temporal-worker-info:
+    interface: temporal-worker-info
     limit: 1
