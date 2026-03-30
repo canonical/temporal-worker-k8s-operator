@@ -8,10 +8,18 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
+import yaml
 from helpers import APP_NAME
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
+
+_WORKER_INFO_REQUIRER_METADATA = yaml.safe_load(
+    Path("./tests/integration/worker_info_requirer/metadata.yaml").read_text(encoding="utf-8")
+)
+_WORKER_INFO_REQUIRER_RESOURCES = {
+    "workload": _WORKER_INFO_REQUIRER_METADATA["resources"]["workload"]["upstream-source"],
+}
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -37,6 +45,7 @@ class TestTemporalWorkerInfoRelation:
         await ops_test.model.deploy(
             worker_info_requirer_charm,
             application_name="worker-info-requirer",
+            resources=_WORKER_INFO_REQUIRER_RESOURCES,
         )
         await ops_test.model.wait_for_idle(
             apps=["worker-info-requirer"], status="waiting", raise_on_blocked=False, timeout=300
