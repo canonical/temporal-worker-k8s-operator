@@ -173,21 +173,30 @@ async def run_sample_workflow(ops_test: OpsTest, workflow_type=None, use_env_var
     assert result == "hello world"
 
 
+async def register_temporal_namespace(ops_test: OpsTest, namespace: str):
+    """Register a namespace on the Temporal server via the admin charm tctl action.
+
+    Args:
+        ops_test: PyTest object.
+        namespace: Temporal namespace name to register.
+    """
+    action = (
+        await ops_test.model.applications[APP_NAME_ADMIN]
+        .units[0]
+        .run_action("tctl", args=f"--ns {namespace} namespace register -rd 3")
+    )
+    result = (await action.wait()).results
+    logger.info("tctl namespace %s: %s", namespace, result)
+    assert "result" in result and result["result"] == "command succeeded"
+
+
 async def create_default_namespace(ops_test: OpsTest):
     """Create default namespace on Temporal server using tctl.
 
     Args:
         ops_test: PyTest object.
     """
-    # Register default namespace from admin charm.
-    action = (
-        await ops_test.model.applications[APP_NAME_ADMIN]
-        .units[0]
-        .run_action("tctl", args="--ns default namespace register -rd 3")
-    )
-    result = (await action.wait()).results
-    logger.info(f"tctl result: {result}")
-    assert "result" in result and result["result"] == "command succeeded"
+    await register_temporal_namespace(ops_test, "default")
 
 
 async def get_application_url(ops_test: OpsTest, application, port):

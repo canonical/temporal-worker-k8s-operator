@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 import yaml
-from helpers import APP_NAME
+from helpers import APP_NAME, register_temporal_namespace
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -37,11 +37,19 @@ class TestTemporalWorkerInfoRelation:
 
     async def test_relation(self, ops_test: OpsTest, worker_info_requirer_charm: str | Path):
         """Verify requirer receives namespace and queue over relation."""
+        await register_temporal_namespace(ops_test, "test-namespace")
         cfg = {
             "namespace": "test-namespace",
             "queue": "test-queue",
         }
         await ops_test.model.applications[APP_NAME].set_config(cfg)
+        async with ops_test.fast_forward():
+            await ops_test.model.wait_for_idle(
+                apps=[APP_NAME],
+                status="active",
+                raise_on_blocked=False,
+                timeout=600,
+            )
         await ops_test.model.deploy(
             worker_info_requirer_charm,
             application_name="worker-info-requirer",
