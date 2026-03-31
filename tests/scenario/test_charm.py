@@ -144,6 +144,39 @@ WANT_ENV_AUTH = {
 }
 
 
+def _build_environment_config(secret_id: str, include_env: bool = False, include_vault: bool = False) -> str:
+    """Build environment config YAML for encryption-key precedence tests."""
+    env_section = (
+        """
+        env:
+            - name: TEMPORAL_ENCRYPTION_KEY
+              value: env-value
+        """
+        if include_env
+        else ""
+    )
+    vault_section = (
+        """
+        vault:
+            - path: secrets
+              name: TEMPORAL_ENCRYPTION_KEY
+              key: token
+        """
+        if include_vault
+        else ""
+    )
+    return textwrap.dedent(
+        f"""
+        {env_section}
+        juju:
+            - secret-id: {secret_id}
+              name: TEMPORAL_ENCRYPTION_KEY
+              key: encryption-key
+        {vault_section}
+        """
+    )
+
+
 @pytest.fixture
 def all_required_relations(peer_relation, vault_relation, database_relation):
     return [
@@ -436,29 +469,45 @@ def test_valid_environment_config(context, state, temporal_worker_container, con
         )
 
 
-def test_environment_juju_secret_overrides_empty_charm_config(
-    context, state, temporal_worker_container, config, encryption_key_secret, vault_nonce_secret
+@pytest.mark.parametrize(
+    "charm_encryption_key, expected_temporal_key, expected_twc_key",
+    [
+        ("", "secret-encryption-key", ""),
+        ("plaintext-config-key", "secret-encryption-key", "plaintext-config-key"),
+    ],
+    ids=["empty-charm-config", "non-empty-charm-config"],
+)
+def test_environment_juju_secret_overrides_charm_config(
+    context,
+    state,
+    temporal_worker_container,
+    config,
+    encryption_key_secret,
+    vault_nonce_secret,
+    charm_encryption_key,
+    expected_temporal_key,
+    expected_twc_key,
 ):
     state = dataclasses.replace(state, secrets=[encryption_key_secret, vault_nonce_secret])
     state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
     state_out = context.run(context.on.config_changed(), state_out)
 
-    environment_config = textwrap.dedent(
-        f"""
-        juju:
-            - secret-id: {encryption_key_secret.id}
-              name: TEMPORAL_ENCRYPTION_KEY
-              key: encryption-key
-        """
-    )
+    environment_config = _build_environment_config(secret_id=encryption_key_secret.id)
 
-    state_out = dataclasses.replace(state_out, config={**config, "environment": environment_config})
+    state_out = dataclasses.replace(
+        state_out,
+        config={**config, "encryption-key": charm_encryption_key, "environment": environment_config},
+    )
     with unittest.mock.patch(
         "ops.jujuversion.JujuVersion.from_environ", return_value=ops.jujuversion.JujuVersion(version="3.6")
     ):
         state_out = context.run(context.on.config_changed(), state_out)
 
-    expected_env = {**WANT_ENV, "TEMPORAL_ENCRYPTION_KEY": "secret-encryption-key"}
+    expected_env = {
+        **WANT_ENV,
+        "TEMPORAL_ENCRYPTION_KEY": expected_temporal_key,
+        "TWC_ENCRYPTION_KEY": expected_twc_key,
+    }
     assert sorted(state_out.get_container("temporal-worker").plan.to_dict()) == sorted(
         {
             "services": {
@@ -481,20 +530,8 @@ def test_environment_precedence_vault_over_juju_over_env(
     state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
     state_out = context.run(context.on.config_changed(), state_out)
 
-    environment_config = textwrap.dedent(
-        f"""
-        env:
-            - name: TEMPORAL_ENCRYPTION_KEY
-              value: env-value
-        juju:
-            - secret-id: {encryption_key_secret.id}
-              name: TEMPORAL_ENCRYPTION_KEY
-              key: encryption-key
-        vault:
-            - path: secrets
-              name: TEMPORAL_ENCRYPTION_KEY
-              key: token
-        """
+    environment_config = _build_environment_config(
+        secret_id=encryption_key_secret.id, include_env=True, include_vault=True
     )
 
     state_out = dataclasses.replace(state_out, config={**config, "environment": environment_config})
@@ -530,51 +567,6 @@ def test_environment_precedence_vault_over_juju_over_env(
     )
 
 
-def test_environment_juju_secret_overrides_non_empty_charm_config(
-    context, state, temporal_worker_container, config, encryption_key_secret, vault_nonce_secret
-):
-    state = dataclasses.replace(state, secrets=[encryption_key_secret, vault_nonce_secret])
-    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
-    state_out = context.run(context.on.config_changed(), state_out)
-
-    environment_config = textwrap.dedent(
-        f"""
-        juju:
-            - secret-id: {encryption_key_secret.id}
-              name: TEMPORAL_ENCRYPTION_KEY
-              key: encryption-key
-        """
-    )
-
-    state_out = dataclasses.replace(
-        state_out,
-        config={**config, "encryption-key": "plaintext-config-key", "environment": environment_config},
-    )
-    with unittest.mock.patch(
-        "ops.jujuversion.JujuVersion.from_environ", return_value=ops.jujuversion.JujuVersion(version="3.6")
-    ):
-        state_out = context.run(context.on.config_changed(), state_out)
-
-    expected_env = {
-        **WANT_ENV,
-        "TEMPORAL_ENCRYPTION_KEY": "secret-encryption-key",
-        "TWC_ENCRYPTION_KEY": "plaintext-config-key",
-    }
-    assert sorted(state_out.get_container("temporal-worker").plan.to_dict()) == sorted(
-        {
-            "services": {
-                "temporal-worker": {
-                    "summary": "temporal worker",
-                    "command": "/app/scripts/start-worker.sh",
-                    "startup": "enabled",
-                    "override": "replace",
-                    "environment": expected_env,
-                },
-            },
-        }
-    )
-
-
 def test_auth_secret_overrides_environment_auth_keys(
     context, state, temporal_worker_container, config, encryption_key_secret, oidc_auth_secret, vault_nonce_secret
 ):
@@ -582,14 +574,7 @@ def test_auth_secret_overrides_environment_auth_keys(
     state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
     state_out = context.run(context.on.config_changed(), state_out)
 
-    environment_config = textwrap.dedent(
-        f"""
-        juju:
-            - secret-id: {encryption_key_secret.id}
-              name: TEMPORAL_ENCRYPTION_KEY
-              key: encryption-key
-        """
-    )
+    environment_config = _build_environment_config(secret_id=encryption_key_secret.id)
 
     state_out = dataclasses.replace(
         state_out,
