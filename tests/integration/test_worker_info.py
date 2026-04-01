@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 import yaml
-from helpers import APP_NAME, register_temporal_namespace
+from helpers import APP_NAME, register_temporal_namespace, wait_for_status_message
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -20,6 +20,9 @@ _WORKER_INFO_REQUIRER_METADATA = yaml.safe_load(
 _WORKER_INFO_REQUIRER_RESOURCES = {
     "workload": _WORKER_INFO_REQUIRER_METADATA["resources"]["workload"]["upstream-source"],
 }
+
+# Matches worker charm ActiveStatus (see src/charm.py: config namespace/queue use !r).
+_EXPECTED_WORKER_STATUS = "worker listening to namespace 'test-namespace' on queue 'test-queue'"
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -50,6 +53,9 @@ class TestTemporalWorkerInfoRelation:
                 raise_on_blocked=False,
                 timeout=600,
             )
+        await wait_for_status_message(
+            ops_test, APP_NAME, 1, _EXPECTED_WORKER_STATUS, timeout=600, cadence=3
+        )
         await ops_test.model.deploy(
             worker_info_requirer_charm,
             application_name="worker-info-requirer",
