@@ -154,7 +154,10 @@ def _build_environment_config(
     vault_path: str = "secrets",
     vault_key: str = "token",
 ) -> str:
-    """Build environment config YAML for env/juju/vault precedence tests."""
+    """Build `environment` config YAML (env / juju / vault blocks) for precedence tests.
+
+    Used to avoid duplicating YAML; callers choose variable name and which sections to include.
+    """
     env_section = (
         """
         env:
@@ -187,7 +190,7 @@ def _build_environment_config(
 
 
 def _get_plan_environment(state_out: ops.testing.State) -> dict:
-    """Return temporal-worker environment section from the pebble plan."""
+    """Return the Pebble `environment` dict for the temporal-worker service (focused assertions)."""
     return state_out.get_container("temporal-worker").plan.to_dict()["services"]["temporal-worker"]["environment"]
 
 
@@ -502,6 +505,10 @@ def test_environment_juju_secret_overrides_charm_config(
     expected_temporal_key,
     expected_twc_key,
 ):
+    """Juju secret in `environment` must override charm-derived TEMPORAL_ENCRYPTION_KEY (see #36).
+
+    Charm maps encryption-key to both TWC_* and TEMPORAL_*; juju supplies TEMPORAL_ENCRYPTION_KEY only.
+    """
     state = dataclasses.replace(state, secrets=[encryption_key_secret, vault_nonce_secret])
     state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
 
@@ -524,6 +531,10 @@ def test_environment_juju_secret_overrides_charm_config(
 def test_environment_precedence_vault_over_juju_over_env(
     context, state, temporal_worker_container, config, encryption_key_secret, vault_nonce_secret
 ):
+    """Within `environment`, merge order is vault over juju over env for the same key.
+
+    Uses a non-reserved variable name so vault env rules do not reject TEMPORAL_/TWC_ prefixes.
+    """
     state = dataclasses.replace(state, secrets=[encryption_key_secret, vault_nonce_secret])
     state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
 
@@ -558,6 +569,7 @@ def test_environment_precedence_vault_over_juju_over_env(
 def test_auth_secret_overrides_environment_auth_keys(
     context, state, temporal_worker_container, config, encryption_key_secret, oidc_auth_secret, vault_nonce_secret
 ):
+    """auth-secret-id must win over `environment` juju bindings for overlapping auth keys."""
     state = dataclasses.replace(state, secrets=[encryption_key_secret, oidc_auth_secret, vault_nonce_secret])
     state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
 
