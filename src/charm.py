@@ -329,11 +329,11 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         context = {}
         auth_config = {}
+        charm_config_env = {}
         try:
             self._validate(event)
             if self.config.get("environment"):
                 charm_config_env = self.create_env()
-                context.update(charm_config_env)
             if self.config.get("auth-secret-id"):
                 auth_config = self.get_auth_config_from_juju_secret()
         except ValueError as err:
@@ -368,6 +368,10 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 if key not in ["environment", "auth-secret-id"]
             }
         )
+
+        # Environment config (env/juju/vault) should override base charm config values.
+        if charm_config_env:
+            context.update(charm_config_env)
 
         # Auth configs coming from a juju secret take precedence over those coming from config.
         # Auth config options will be deprecated in favor of using juju user secrets.

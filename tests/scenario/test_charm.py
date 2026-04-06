@@ -144,6 +144,56 @@ WANT_ENV_AUTH = {
 }
 
 
+def _build_environment_config(
+    secret_id: str,
+    variable_name: str = "TEMPORAL_ENCRYPTION_KEY",
+    secret_key: str = "encryption-key",
+    include_env: bool = False,
+    include_vault: bool = False,
+    env_value: str = "env-value",
+    vault_path: str = "secrets",
+    vault_key: str = "token",
+) -> str:
+    """Build `environment` config YAML (env / juju / vault blocks) for precedence tests.
+
+    Used to avoid duplicating YAML; callers choose variable name and which sections to include.
+    """
+    env_section = (
+        """
+        env:
+            - name: {variable_name}
+              value: {env_value}
+        """
+        if include_env
+        else ""
+    )
+    vault_section = (
+        """
+        vault:
+            - path: {vault_path}
+              name: {variable_name}
+              key: {vault_key}
+        """
+        if include_vault
+        else ""
+    )
+    return textwrap.dedent(
+        f"""
+        {env_section.format(variable_name=variable_name, env_value=env_value)}
+        juju:
+            - secret-id: {secret_id}
+              name: {variable_name}
+              key: {secret_key}
+        {vault_section.format(variable_name=variable_name, vault_path=vault_path, vault_key=vault_key)}
+        """
+    )
+
+
+def _get_plan_environment(state_out: ops.testing.State) -> dict:
+    """Return the Pebble `environment` dict for the temporal-worker service (focused assertions)."""
+    return state_out.get_container("temporal-worker").plan.to_dict()["services"]["temporal-worker"]["environment"]
+
+
 @pytest.fixture
 def all_required_relations(peer_relation, vault_relation, database_relation):
     return [
@@ -434,6 +484,109 @@ def test_valid_environment_config(context, state, temporal_worker_container, con
                 },
             }
         )
+
+
+@pytest.mark.parametrize(
+    "charm_encryption_key, expected_temporal_key, expected_twc_key",
+    [
+        ("", "secret-encryption-key", ""),
+        ("plaintext-config-key", "secret-encryption-key", "plaintext-config-key"),
+    ],
+    ids=["empty-charm-config", "non-empty-charm-config"],
+)
+def test_environment_juju_secret_overrides_charm_config(
+    context,
+    state,
+    temporal_worker_container,
+    config,
+    encryption_key_secret,
+    vault_nonce_secret,
+    charm_encryption_key,
+    expected_temporal_key,
+    expected_twc_key,
+):
+    """Juju secret in `environment` must override charm-derived TEMPORAL_ENCRYPTION_KEY (see #36).
+
+    Charm maps encryption-key to both TWC_* and TEMPORAL_*; juju supplies TEMPORAL_ENCRYPTION_KEY only.
+    """
+    state = dataclasses.replace(state, secrets=[encryption_key_secret, vault_nonce_secret])
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+
+    environment_config = _build_environment_config(secret_id=encryption_key_secret.id)
+
+    state_out = dataclasses.replace(
+        state_out,
+        config={**config, "encryption-key": charm_encryption_key, "environment": environment_config},
+    )
+    with unittest.mock.patch(
+        "ops.jujuversion.JujuVersion.from_environ", return_value=ops.jujuversion.JujuVersion(version="3.6")
+    ):
+        state_out = context.run(context.on.config_changed(), state_out)
+
+    actual_env = _get_plan_environment(state_out)
+    assert actual_env["TEMPORAL_ENCRYPTION_KEY"] == expected_temporal_key
+    assert actual_env["TWC_ENCRYPTION_KEY"] == expected_twc_key
+
+
+def test_environment_precedence_vault_over_juju_over_env(
+    context, state, temporal_worker_container, config, encryption_key_secret, vault_nonce_secret
+):
+    """Within `environment`, merge order is vault over juju over env for the same key.
+
+    Uses a non-reserved variable name so vault env rules do not reject TEMPORAL_/TWC_ prefixes.
+    """
+    state = dataclasses.replace(state, secrets=[encryption_key_secret, vault_nonce_secret])
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+
+    environment_config = _build_environment_config(
+        secret_id=encryption_key_secret.id,
+        variable_name="test_key",
+        include_env=True,
+        include_vault=True,
+    )
+
+    state_out = dataclasses.replace(state_out, config={**config, "environment": environment_config})
+    with unittest.mock.patch(
+        "ops.jujuversion.JujuVersion.from_environ", return_value=ops.jujuversion.JujuVersion(version="3.6")
+    ), unittest.mock.patch(
+        "relations.vault.VaultRelation.get_vault_config", return_value=VAULT_CONFIG
+    ), unittest.mock.patch(
+        "relations.vault.VaultRelation.get_vault_client"
+    ) as get_vault_client, unittest.mock.patch(
+        "os.makedirs"
+    ), unittest.mock.patch(
+        "builtins.open", new_callable=unittest.mock.mock_open
+    ):
+        mock_vault_client = unittest.mock.Mock()
+        mock_vault_client.read_secret.return_value = "vault-value"
+        get_vault_client.return_value = mock_vault_client
+        state_out = context.run(context.on.config_changed(), state_out)
+
+    actual_env = _get_plan_environment(state_out)
+    assert actual_env["test_key"] == "vault-value"
+
+
+def test_auth_secret_overrides_environment_auth_keys(
+    context, state, temporal_worker_container, config, encryption_key_secret, oidc_auth_secret, vault_nonce_secret
+):
+    """auth-secret-id must win over `environment` juju bindings for overlapping auth keys."""
+    state = dataclasses.replace(state, secrets=[encryption_key_secret, oidc_auth_secret, vault_nonce_secret])
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+
+    environment_config = _build_environment_config(secret_id=encryption_key_secret.id)
+
+    state_out = dataclasses.replace(
+        state_out,
+        config={**config, "auth-secret-id": oidc_auth_secret.id, "environment": environment_config},
+    )
+    with unittest.mock.patch(
+        "ops.jujuversion.JujuVersion.from_environ", return_value=ops.jujuversion.JujuVersion(version="3.6")
+    ):
+        state_out = context.run(context.on.config_changed(), state_out)
+
+    actual_env = _get_plan_environment(state_out)
+    for key, value in WANT_ENV_AUTH.items():
+        assert actual_env[key] == value
 
 
 @pytest.mark.database_relation_skipped
