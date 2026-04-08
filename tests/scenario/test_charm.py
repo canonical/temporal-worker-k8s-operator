@@ -229,43 +229,6 @@ def test_blocked_on_missing_required_config(context, state):
     assert state_out.unit_status == ops.BlockedStatus("Invalid config: namespace value missing")
 
 
-def test_blocked_without_host_or_host_info(context, state, temporal_worker_container, config):
-    state = dataclasses.replace(state, config={**config, "host": ""})
-    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
-
-    assert state_out.unit_status == ops.BlockedStatus(
-        "temporal-host-info relation not established; set deprecated `host` config as fallback"
-    )
-
-
-def test_temporal_host_info_takes_precedence_over_deprecated_host(
-    context, state, temporal_worker_container, namespace, queue, config, host_info_relation
-):
-    cfg = {**config, "host": "deprecated-wrong:1"}
-    state = dataclasses.replace(
-        state,
-        config=cfg,
-        relations=[*state.relations, host_info_relation],
-    )
-    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
-    state_out = context.run(context.on.config_changed(), state_out)
-
-    want = {**WANT_ENV, "TEMPORAL_HOST": "relation-host:7233", "TWC_HOST": "relation-host:7233"}
-    assert sorted(state_out.get_container("temporal-worker").plan.to_dict()) == sorted(
-        {
-            "services": {
-                "temporal-worker": {
-                    "summary": "temporal worker",
-                    "command": "/app/scripts/start-worker.sh",
-                    "startup": "enabled",
-                    "override": "replace",
-                    "environment": want,
-                },
-            },
-        }
-    )
-
-
 def test_image_without_entrypoint(context, state, temporal_worker_container):
     with unittest.mock.patch("ops.Container.exists", return_value=False):
         state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)

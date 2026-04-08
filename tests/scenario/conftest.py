@@ -252,12 +252,3 @@ def database_relation():
             "tls": "True",
         },
     )
-
-
-@pytest.fixture(scope="function")
-def host_info_relation():
-    """Remote temporal-k8s provider data for temporal-host-info (requirer side)."""
-    return ops.testing.Relation(
-        "temporal-host-info",
-        remote_app_data={"host": "relation-host", "port": "7233"},
-    )

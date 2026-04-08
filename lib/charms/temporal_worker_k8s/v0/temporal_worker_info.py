@@ -20,13 +20,15 @@ import logging
 
 from ops import (
     ConfigChangedEvent,
+    EventBase,
+    EventSource,
     Handle,
     Object,
+    ObjectEvents,
     RelationChangedEvent,
     RelationJoinedEvent,
 )
 from ops.charm import CharmBase
-from ops.framework import EventBase, EventSource, ObjectEvents
 from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
@@ -79,7 +81,7 @@ class TemporalWorkerInfoProvider(Object):
         """
         logger.info("Config changed, updating temporal-worker-info relation data")
         if self.charm.unit.is_leader():
-            for relation in self.charm.model.relations.get(RELATION_NAME, ()):
+            for relation in self.charm.model.relations.get(RELATION_NAME, []):
                 relation.data[self.charm.app]["namespace"] = str(self.charm.config["namespace"])
                 relation.data[self.charm.app]["queue"] = str(self.charm.config["queue"])
 
@@ -242,10 +244,9 @@ class TemporalWorkerInfoRequirer(Object):
             workers use :meth:`relation_payloads` or :meth:`get_namespace_queue`.
         """
         for relation in self.relations:
-            if relation and relation.app:
-                data = relation.data[relation.app]
-                if "namespace" in data and "queue" in data:
-                    return data["namespace"]
+            namespace, _ = self.get_namespace_queue(relation.id)
+            if namespace is not None:
+                return namespace
         return None
 
     @property
@@ -256,10 +257,9 @@ class TemporalWorkerInfoRequirer(Object):
             Queue string, or ``None`` if no relation has complete data.
         """
         for relation in self.relations:
-            if relation and relation.app:
-                data = relation.data[relation.app]
-                if "namespace" in data and "queue" in data:
-                    return data["queue"]
+            _, queue = self.get_namespace_queue(relation.id)
+            if queue is not None:
+                return queue
         return None
 
     def _on_worker_info_relation_changed(self, event: RelationChangedEvent) -> None:
@@ -270,9 +270,7 @@ class TemporalWorkerInfoRequirer(Object):
         """
         if not self.is_ready(event.relation.id):
             return
-        app = event.relation.app
-        namespace = event.relation.data[app]["namespace"]
-        queue = event.relation.data[app]["queue"]
+        namespace, queue = self.get_namespace_queue(event.relation.id)
         self.on.temporal_worker_info_available.emit(
             namespace=namespace,
             queue=queue,

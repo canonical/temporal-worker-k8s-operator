@@ -190,15 +190,6 @@ async def register_temporal_namespace(ops_test: OpsTest, namespace: str):
     assert "result" in result and result["result"] == "command succeeded"
 
 
-async def create_default_namespace(ops_test: OpsTest):
-    """Create default namespace on Temporal server using tctl.
-
-    Args:
-        ops_test: PyTest object.
-    """
-    await register_temporal_namespace(ops_test, "default")
-
-
 async def get_application_url(ops_test: OpsTest, application, port):
     """Return application URL from the model.
 
@@ -298,7 +289,7 @@ async def setup_temporal_ecosystem(ops_test: OpsTest):
 
         await perform_temporal_integrations(ops_test)
 
-        await create_default_namespace(ops_test)
+        await register_temporal_namespace(ops_test, "default")
 
         await ops_test.model.wait_for_idle(apps=[APP_NAME_SERVER], status="active", raise_on_blocked=False, timeout=300)
         assert ops_test.model.applications[APP_NAME_SERVER].units[0].workload_status == "active"
