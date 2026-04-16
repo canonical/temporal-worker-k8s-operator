@@ -425,7 +425,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         context.update({"TWC_PROMETHEUS_PORT": PROMETHEUS_PORT, "TEMPORAL_PROMETHEUS_PORT": PROMETHEUS_PORT})
 
-        if self.model.get_relation("database"):
+        if self.model.get_relation("database") and self._state.database_connection:
             context.update(
                 {
                     "TEMPORAL_DB_HOST": self._state.database_connection.get("host"),
