@@ -4,6 +4,7 @@
 """Temporal worker charm temporal-worker-info integration tests."""
 
 import logging
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
