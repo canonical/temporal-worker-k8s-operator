@@ -4,22 +4,13 @@
 """Temporal worker charm temporal-worker-info integration tests."""
 
 import logging
-from pathlib import Path
 
 import pytest
 import pytest_asyncio
-import yaml
 from helpers import APP_NAME, register_temporal_namespace, wait_for_status_message
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
-
-_WORKER_INFO_REQUIRER_METADATA = yaml.safe_load(
-    Path("./tests/integration/worker_info_requirer/metadata.yaml").read_text(encoding="utf-8")
-)
-_WORKER_INFO_REQUIRER_RESOURCES = {
-    "workload": _WORKER_INFO_REQUIRER_METADATA["resources"]["workload"]["upstream-source"],
-}
 
 # Matches worker charm ActiveStatus (see src/charm.py: config namespace/queue use !r).
 _EXPECTED_WORKER_STATUS = "worker listening to namespace 'test-namespace' on queue 'test-queue'"
@@ -38,7 +29,12 @@ async def worker_info_requirer_charm(ops_test: OpsTest) -> str | Path:
 class TestTemporalWorkerInfoRelation:
     """Integration tests for temporal-worker-info relation."""
 
-    async def test_relation(self, ops_test: OpsTest, worker_info_requirer_charm: str | Path):
+    async def test_relation(
+        self,
+        ops_test: OpsTest,
+        worker_info_requirer_charm: str | Path,
+        temporal_worker_image: str,
+    ):
         """Verify requirer receives namespace and queue over relation."""
         await register_temporal_namespace(ops_test, "test-namespace")
         cfg = {
@@ -59,7 +55,7 @@ class TestTemporalWorkerInfoRelation:
         await ops_test.model.deploy(
             worker_info_requirer_charm,
             application_name="worker-info-requirer",
-            resources=_WORKER_INFO_REQUIRER_RESOURCES,
+            resources={"workload": temporal_worker_image},
         )
         await ops_test.model.wait_for_idle(
             apps=["worker-info-requirer"], status="waiting", raise_on_blocked=False, timeout=300

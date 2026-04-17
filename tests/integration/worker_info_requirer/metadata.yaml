@@ -14,7 +14,7 @@ resources:
   workload:
     type: oci-image
     description: OCI image for the 'workload' container.
-    upstream-source: ghcr.io/canonical/ubuntu-noble:latest
+    upstream-source: ubuntu/python:3.12-24.04_stable
 
 requires:
   temporal-worker-info:
