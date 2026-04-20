@@ -16,6 +16,12 @@ developer friendly primitives and avoid fighting your infrastructure
 This operator provides a Temporal Worker, and consists of Python scripts which
 connect to a deployed Temporal server.
 
+### Temporal endpoint resolution
+
+The `temporal-host-info` relation is the preferred source of the Temporal server address. If relation data is unavailable, the deprecated `host` config option is used as a temporary fallback for upgrade compatibility.
+
+`host` is deprecated and will be removed in a future release. Prefer integrating the `temporal-host-info` relation instead of relying on config fallback.
+
 ## Usage
 
 ### Deploying
@@ -41,9 +47,11 @@ juju config temporal-worker-k8s --file=path/to/config.yaml
 
 #### **`config.yaml`**
 
+Prefer `juju integrate temporal-k8s:temporal-host-info temporal-worker-k8s:temporal-host-info`. If you cannot use the relation yet, set `host` as a deprecated fallback:
+
 ```yaml
 temporal-worker-k8s:
-  host: "localhost:7233" # Replace with Temporal server hostname
+  host: "localhost:7233" # [DEPRECATED] optional fallback; prefer temporal-host-info relation
   queue: "test-queue"
   namespace: "test"
 ```

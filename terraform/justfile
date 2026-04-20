@@ -16,10 +16,27 @@ start-local-registry: (stop-local-registry)
 [private]
 build-and-push-image: (start-local-registry)
     #!/usr/bin/bash
+    set -euxo pipefail
     cd test
-    rockcraft pack
+    for attempt in {1..3}; do
+        if rockcraft pack; then
+            break
+        fi
+        if [ "${attempt}" -eq 3 ]; then
+            echo "rockcraft pack failed after ${attempt} attempts"
+            exit 1
+        fi
+        echo "rockcraft pack failed (attempt ${attempt}); retrying in 20s..."
+        sleep 20
+    done
 
-    rock_file=$(ls | grep "\.rock")
+    rock_files=( *.rock )
+    if [ "${#rock_files[@]}" -ne 1 ]; then
+        echo "Expected exactly one .rock artifact in terraform/test, found ${#rock_files[@]}"
+        ls -la
+        exit 1
+    fi
+    rock_file="${rock_files[0]}"
 
     rockcraft.skopeo --insecure-policy copy --dest-tls-verify=false \
         "oci-archive:${rock_file}" \

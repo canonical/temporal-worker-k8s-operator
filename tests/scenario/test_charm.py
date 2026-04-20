@@ -222,11 +222,11 @@ def test_smoke(context, state):
     context.run(context.on.start(), state)
 
 
-def test_blocked_on_missing_host(context, state):
+def test_blocked_on_missing_required_config(context, state):
     state = dataclasses.replace(state, config={})
     state_out = context.run(context.on.config_changed(), state)
 
-    assert state_out.unit_status == ops.BlockedStatus("Invalid config: host value missing")
+    assert state_out.unit_status == ops.BlockedStatus("Invalid config: namespace value missing")
 
 
 def test_image_without_entrypoint(context, state, temporal_worker_container):

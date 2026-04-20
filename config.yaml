@@ -10,14 +10,18 @@ options:
   # An example config option to customise the log level of the workload
   log-level:
     description: |
-      Configures the log level of gunicorn. 
+      Configures the log level of gunicorn.
 
       Acceptable values are: "info", "debug", "warning", "error" and "critical"
     default: "info"
     type: string
 
   host:
-    description: The hostname of the Temporal server.
+    description: |
+      [DEPRECATED] Optional fallback Temporal server address (`hostname` or `hostname:port`) when
+      `temporal-host-info` relation is unavailable.
+      Leave empty to require `temporal-host-info` only. If set, this option is deprecated and will be
+      removed in a future release; prefer the `temporal-host-info` relation as the source of truth.
     default: ""
     type: string
 
@@ -53,9 +57,9 @@ options:
 
   sentry-sample-rate:
     description: |
-      A value between 0 (0% of errors) and 1 (100% of errors) to indicate the proportion of errors 
+      A value between 0 (0% of errors) and 1 (100% of errors) to indicate the proportion of errors
       to be captured by Sentry.
-    
+
     default: 1.0
     type: float
 
@@ -73,7 +77,7 @@ options:
   auth-provider:
     description: |
       (Deprecated in favor of 'auth-secret-id') Authentication provider for user authentication.
-    
+
       Acceptable values are "candid" and "google".
     default: ""
     type: string
@@ -160,28 +164,28 @@ options:
 
   environment:
     description: |
-      This configuration is used to manage and retrieve sensitive information required 
-      by the application from different sources. The `environment` configuration supports 
+      This configuration is used to manage and retrieve sensitive information required
+      by the application from different sources. The `environment` configuration supports
       the following sources:
-      
+
       - **Environment Variables**: Plaintext environment variables.
       - **Juju**: Secrets can be managed and retrieved using Juju's secret storage capabilities.
       - **Vault**: Secrets can be securely stored and accessed from a HashiCorp Vault instance.
-      
-      The application will prioritize these sources in the following order: Vault, Juju, 
-      and then environment variables. If a variable is not found in the higher priority 
-      sources, it will fallback to the next available source. This ensures that the 
-      application can function correctly in various deployment scenarios while maintaining 
+
+      The application will prioritize these sources in the following order: Vault, Juju,
+      and then environment variables. If a variable is not found in the higher priority
+      sources, it will fallback to the next available source. This ensures that the
+      application can function correctly in various deployment scenarios while maintaining
       security and flexibility.
 
       Sample structure:
-    
+
         ```yaml
           env:
             - name: key1
               value: value1
             - name: nested_example_key
-              value: 
+              value:
                 - connection_id: a_connection_id
                   unnesting:
                     tables:

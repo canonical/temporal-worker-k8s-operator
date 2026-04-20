@@ -1,0 +1,19 @@
+# Copyright 2025 Canonical Ltd.
+# See LICENSE file for licensing details.
+#
+# Minimal test charmcraft config.
+# K8s charms can define containers + resources in metadata.yaml.
+
+type: charm
+base: ubuntu@24.04
+platforms:
+  amd64:
+
+parts:
+  charm:
+    plugin: uv
+    source: .
+    build-snaps:
+      - astral-uv
+    build-packages:
+      - python3-venv

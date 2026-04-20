@@ -173,20 +173,20 @@ async def run_sample_workflow(ops_test: OpsTest, workflow_type=None, use_env_var
     assert result == "hello world"
 
 
-async def create_default_namespace(ops_test: OpsTest):
-    """Create default namespace on Temporal server using tctl.
+async def register_temporal_namespace(ops_test: OpsTest, namespace: str):
+    """Register a namespace on the Temporal server via the admin charm tctl action.
 
     Args:
         ops_test: PyTest object.
+        namespace: Temporal namespace name to register.
     """
-    # Register default namespace from admin charm.
     action = (
         await ops_test.model.applications[APP_NAME_ADMIN]
         .units[0]
-        .run_action("tctl", args="--ns default namespace register -rd 3")
+        .run_action("tctl", args=f"--ns {namespace} namespace register -rd 3")
     )
     result = (await action.wait()).results
-    logger.info(f"tctl result: {result}")
+    logger.info("tctl namespace %s: %s", namespace, result)
     assert "result" in result and result["result"] == "command succeeded"
 
 
@@ -271,7 +271,9 @@ async def setup_temporal_ecosystem(ops_test: OpsTest):
         ops_test: PyTest object.
     """
     await asyncio.gather(
-        ops_test.model.deploy(APP_NAME_SERVER, channel="edge", config={"num-history-shards": 1}),
+        ops_test.model.deploy(
+            APP_NAME_SERVER, channel="1.23/edge", config={"num-history-shards": 1}, base="ubuntu@24.04"
+        ),
         ops_test.model.deploy(APP_NAME_ADMIN, channel="edge"),
         ops_test.model.deploy("postgresql-k8s", channel="14/stable", trust=True, revision=381),
     )
@@ -289,7 +291,7 @@ async def setup_temporal_ecosystem(ops_test: OpsTest):
 
         await perform_temporal_integrations(ops_test)
 
-        await create_default_namespace(ops_test)
+        await register_temporal_namespace(ops_test, "default")
 
         await ops_test.model.wait_for_idle(apps=[APP_NAME_SERVER], status="active", raise_on_blocked=False, timeout=300)
         assert ops_test.model.applications[APP_NAME_SERVER].units[0].workload_status == "active"
