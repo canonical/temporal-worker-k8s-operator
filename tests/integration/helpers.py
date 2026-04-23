@@ -233,6 +233,7 @@ async def perform_temporal_integrations(ops_test: OpsTest):
     await ops_test.model.integrate(f"{APP_NAME_SERVER}:db", "postgresql-k8s:database")
     await ops_test.model.integrate(f"{APP_NAME_SERVER}:visibility", "postgresql-k8s:database")
     await ops_test.model.integrate(f"{APP_NAME_SERVER}:admin", f"{APP_NAME_ADMIN}:admin")
+    await ops_test.model.integrate(f"{APP_NAME_SERVER}:temporal-host-info", f"{APP_NAME_ADMIN}:temporal-host-info")
     await ops_test.model.wait_for_idle(apps=[APP_NAME_SERVER], status="active", raise_on_blocked=False, timeout=180)
     await ops_test.model.wait_for_idle(apps=[APP_NAME_SERVER], status="active", raise_on_blocked=False, timeout=180)
 
