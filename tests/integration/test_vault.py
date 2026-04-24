@@ -34,7 +34,9 @@ class TestDeployment:
         """Test Vault relation."""
         await scale(ops_test, app=APP_NAME, units=2)
 
-        await ops_test.model.set_config({"update-status-hook-interval": "60m"})
+        # vault-k8s rev 502 crashes update-status if it fires while the
+        # workload container is still coming up (pebble socket missing).
+        await ops_test.model.set_config({"update-status-hook-interval": "5m"})
         try:
             await ops_test.model.deploy("vault-k8s", channel="1.16/stable")
 
@@ -42,12 +44,10 @@ class TestDeployment:
                 apps=["vault-k8s"],
                 status="blocked",
                 raise_on_blocked=False,
-                timeout=600,
+                timeout=1200,
             )
 
-            # Container is up and charm is blocked; the pebble-vs-update-status
-            # startup race is past, so restore a short interval so the charm
-            # notices initialize/unseal promptly.
+            # Container is up and charm is blocked
             await ops_test.model.set_config({"update-status-hook-interval": "1m"})
 
             # Initialize vault
