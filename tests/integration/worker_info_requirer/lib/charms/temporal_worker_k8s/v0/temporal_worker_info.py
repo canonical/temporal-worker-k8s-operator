@@ -32,14 +32,14 @@ from ops.charm import CharmBase
 from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
-LIBID = "20f19c7f5637417d8703b53b5d500464"
+LIBID = "75e7fa5301634bb9918f52ec0bd66c3a"
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 2
+LIBPATCH = 1
 
 RELATION_NAME = "temporal-worker-info"
 

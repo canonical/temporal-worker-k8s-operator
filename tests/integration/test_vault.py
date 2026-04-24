@@ -34,15 +34,21 @@ class TestDeployment:
         """Test Vault relation."""
         await scale(ops_test, app=APP_NAME, units=2)
 
-        await ops_test.model.deploy("vault-k8s", channel="1.16/edge")
+        # vault-k8s rev 502 crashes update-status if it fires while the
+        # workload container is still coming up (pebble socket missing).
+        await ops_test.model.set_config({"update-status-hook-interval": "5m"})
+        try:
+            await ops_test.model.deploy("vault-k8s", channel="1.16/stable")
 
-        async with ops_test.fast_forward():
             await ops_test.model.wait_for_idle(
                 apps=["vault-k8s"],
                 status="blocked",
                 raise_on_blocked=False,
-                timeout=600,
+                timeout=1200,
             )
+
+            # Container is up and charm is blocked
+            await ops_test.model.set_config({"update-status-hook-interval": "1m"})
 
             # Initialize vault
             logger.info("initializing vault-k8s charm")
@@ -91,3 +97,5 @@ class TestDeployment:
             )
 
             await run_sample_workflow(ops_test, workflow_type="vault")
+        finally:
+            await ops_test.model.set_config({"update-status-hook-interval": "1m"})

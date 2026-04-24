@@ -102,4 +102,4 @@ test: (build-and-push-image)
 
     just apply "./test/test.tfvars"
 
-    juju wait-for model terraform --query="forEach(units, unit => (unit.workload-status == 'blocked' && unit.workload-message == 'Invalid config: host value missing'))"
+    juju wait-for model terraform --query="forEach(units, unit => (unit.workload-status == 'blocked' && (unit.workload-message == 'Invalid config: host value missing' || unit.workload-message == 'temporal-host-info relation not established; set deprecated \`host\` config as fallback')))"
