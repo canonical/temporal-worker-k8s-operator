@@ -69,7 +69,19 @@ class TestUpgrade:
     async def test_upgrade(self, ops_test: OpsTest, charm: str):
         """Builds the current charm and refreshes the current deployment."""
         logger.info("Refreshing Temporal worker charm from local build")
-        await ops_test.model.applications[APP_NAME].refresh(path=str(charm))
+        # Use CLI directly to support --base parameter for 22.04→24.04 platform upgrade
+        model_name = ops_test.model.name
+        retcode, stdout, stderr = await ops_test.juju(
+            "refresh",
+            APP_NAME,
+            "--path",
+            str(charm),
+            "--base",
+            "ubuntu@24.04",
+            "-m",
+            model_name,
+        )
+        assert retcode == 0, f"Refresh failed: {stderr}"
         secret_id = await add_juju_secret(ops_test)
         worker_config = get_worker_config(secret_id)
 
