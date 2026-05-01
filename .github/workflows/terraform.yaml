@@ -1,7 +1,7 @@
 name: Terraform checks
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: terraform-${{ github.ref }}
   cancel-in-progress: true
 
 on:
