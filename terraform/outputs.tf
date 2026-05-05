@@ -11,8 +11,9 @@ output "provides" {
 
 output "requires" {
   value = {
-    logging  = "logging"
-    vault    = "vault"
-    database = "postgresql_client"
+    logging            = "logging"
+    vault              = "vault"
+    database           = "postgresql_client"
+    temporal_host_info = "temporal-host-info"
   }
 }
