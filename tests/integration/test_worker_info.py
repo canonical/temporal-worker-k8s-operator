@@ -50,9 +50,7 @@ class TestTemporalWorkerInfoRelation:
                 raise_on_blocked=False,
                 timeout=600,
             )
-        await wait_for_status_message(
-            ops_test, APP_NAME, 1, _EXPECTED_WORKER_STATUS, timeout=600, cadence=3
-        )
+        await wait_for_status_message(ops_test, APP_NAME, 1, _EXPECTED_WORKER_STATUS, timeout=600, cadence=3)
         await ops_test.model.deploy(
             worker_info_requirer_charm,
             application_name="worker-info-requirer",

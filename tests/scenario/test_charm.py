@@ -10,6 +10,8 @@ import ops
 import ops.testing
 import pytest
 
+import relations.vault as vault_relation_module
+
 logger = logging.getLogger(__name__)
 
 CONFIG = {
@@ -41,11 +43,10 @@ CONFIG = {
 
 VAULT_CONFIG = {
     "vault_address": "127.0.0.1:8081",
-    "vault_ca_certificate_bytes": "abcd",
+    "vault_ca_certificate": "abcd",
     "vault_mount": "temporal-worker-k8s",
     "vault_role_id": "111",
     "vault_role_secret_id": "222",
-    "vault_cert_path": "/vault/cert.pem",
 }
 
 DATABASE_CONFIG = {
@@ -353,6 +354,56 @@ def test_vault_relation(context, state, temporal_worker_container):
             },
         }
     )
+
+
+def test_vault_client_recreates_ca_certificate_from_relation_data(
+    context, state, temporal_worker_container, config, role_secret, tmp_path
+):
+    """Vault client should not depend on persistent Juju storage for its CA certificate."""
+    state = dataclasses.replace(state, secrets=[*state.secrets, role_secret])
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+    ca_cert_dir = tmp_path / "vault"
+    ca_cert_path = ca_cert_dir / vault_relation_module.VAULT_CA_CERT_FILENAME
+    environment_config = textwrap.dedent(
+        """
+        vault:
+            - path: secrets
+              name: access_token
+              key: token
+        """
+    )
+    state_out = dataclasses.replace(state_out, config={**config, "environment": environment_config})
+
+    def create_ca_cert_dir():
+        """Create the mocked CA certificate directory.
+
+        Returns:
+            The mocked CA certificate directory.
+        """
+        ca_cert_dir.mkdir(mode=0o700)
+        ca_cert_dir.chmod(0o700)
+        return ca_cert_dir
+
+    with unittest.mock.patch(
+        "relations.vault.VaultRelation._create_ca_certificate_dir", side_effect=create_ca_cert_dir
+    ), unittest.mock.patch("relations.vault.VaultClient") as vault_client:
+        mock_vault_client = unittest.mock.Mock()
+        mock_vault_client.read_secret.return_value = "token_secret"
+        vault_client.return_value = mock_vault_client
+
+        state_out = context.run(context.on.config_changed(), state_out)
+
+    assert ca_cert_path.read_text() == "abcd"
+    assert oct(ca_cert_dir.stat().st_mode & 0o777) == "0o700"
+    assert oct(ca_cert_path.stat().st_mode & 0o777) == "0o600"
+    vault_client.assert_called_once_with(
+        address="127.0.0.1:8081",
+        role_id="111",
+        role_secret_id="222",
+        mount_point="temporal-worker-k8s",
+        cert_path=str(ca_cert_path),
+    )
+    assert _get_plan_environment(state_out)["access_token"] == "token_secret"
 
 
 def test_invalid_environment_config(context, state, temporal_worker_container, config):
