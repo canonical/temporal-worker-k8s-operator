@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 VAULT_NONCE_SECRET_LABEL = "nonce"  # nosec
 VAULT_CA_CERT_FILENAME = "ca.pem"
-VAULT_CA_CERT_DIR_PREFIX = "temporal-worker-k8s-vault-"
+VAULT_CA_CERT_DIR_NAME = "temporal-worker-k8s-vault"
 
 
 class VaultRelation(framework.Object):
@@ -175,6 +175,6 @@ class VaultRelation(framework.Object):
         Returns:
             Path to the directory.
         """
-        ca_cert_dir = Path(tempfile.mkdtemp(prefix=VAULT_CA_CERT_DIR_PREFIX))
-        ca_cert_dir.chmod(0o700)
+        ca_cert_dir = Path(tempfile.gettempdir()) / VAULT_CA_CERT_DIR_NAME
+        ca_cert_dir.mkdir(mode=0o700, exist_ok=True)
         return ca_cert_dir
