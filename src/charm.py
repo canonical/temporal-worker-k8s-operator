@@ -10,6 +10,7 @@ import logging
 import os
 import secrets
 
+import ops
 import yaml
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
@@ -61,13 +62,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         )
         self.postgresql = Postgresql(self)
 
-        self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.framework.observe(self.on.temporal_worker_pebble_ready, self._on_temporal_worker_pebble_ready)
-        self.framework.observe(self.on.restart_action, self._on_restart)
-        self.framework.observe(self.on.update_status, self._on_update_status)
-        self.framework.observe(self.on.install, self._on_install)
-        self.framework.observe(self.on.secret_changed, self._on_secret_changed)
-
         # Vault
         self.vault = vault_kv.VaultKvRequires(
             self,
@@ -93,8 +87,37 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         self.worker_info = TemporalWorkerInfoProvider(self)
         self.host_info = TemporalHostInfoRequirer(self)
-        self.framework.observe(self.host_info.on.temporal_host_info_changed, self._update)
-        self.framework.observe(self.host_info.on.temporal_host_info_unavailable, self._update)
+
+        # Route all reconcilable events to _reconcile
+        reconcile_events = [
+            self.on.install,
+            self.on.start,
+            self.on.config_changed,
+            self.on.upgrade_charm,
+            self.on.update_status,
+            self.on.leader_elected,
+            self.on["temporal-worker"].pebble_ready,
+            self.on["peer"].relation_changed,
+            # Database relation events (previously in Postgresql subclass)
+            self.database.on.database_created,
+            self.database.on.endpoints_changed,
+            self.on.database_relation_broken,
+            # Vault events (vault.ready and vault.gone_away previously in VaultRelation subclass)
+            self.vault.on.ready,
+            self.vault.on.gone_away,
+            # Host info events
+            self.host_info.on.temporal_host_info_changed,
+            self.host_info.on.temporal_host_info_unavailable,
+            # Secret changed
+            self.on.secret_changed,
+        ]
+        for event in reconcile_events:
+            self.framework.observe(event, self._reconcile)
+
+        # Dedicated handlers
+        self.framework.observe(self.vault.on.connected, self._on_vault_connected)
+        self.framework.observe(self.on.restart_action, self._on_restart)
+        self.framework.observe(self.on.collect_unit_status, self._on_collect_unit_status)
 
     @property
     def _deprecated_host(self) -> str | None:
@@ -106,30 +129,15 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         return stripped or None
 
     @log_event_handler(logger)
-    def _on_install(self, event):
-        """Handle on install event.
+    def _on_vault_connected(self, event: vault_kv.VaultKvConnectedEvent):
+        """Handle Vault connected event.
 
         Args:
-            event: The event triggered on install.
+            event: The event triggered when the Vault connection is created.
         """
-        self.unit.add_secret(
-            {"nonce": secrets.token_hex(16)},
-            label=VAULT_NONCE_SECRET_LABEL,
-            description="Nonce for vault-kv relation",
-        )
-
-    @log_event_handler(logger)
-    def _on_temporal_worker_pebble_ready(self, event):
-        """Define and start temporal using the Pebble API.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        if not self._state.is_ready():
-            event.defer()
-            return
-
-        self._update(event)
+        relation = self.model.get_relation(event.relation_name, event.relation_id)
+        egress_subnet = str(self.model.get_binding(relation).network.interfaces[0].subnet)
+        self.vault.request_credentials(relation, egress_subnet, self.vault_relation.get_vault_nonce())
 
     @log_event_handler(logger)
     def _on_restart(self, event):
@@ -148,55 +156,222 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         event.set_results({"result": "worker successfully restarted"})
 
-    @log_event_handler(logger)
-    def _on_config_changed(self, event):
-        """Handle configuration changes.
+    def _reconcile(self, event):
+        """Central reconciliation loop: read -> compute -> write.
 
         Args:
-            event: The event triggered when the relation changed.
+            event: The event that triggered reconciliation.
         """
-        self.unit.status = WaitingStatus("configuring temporal worker")
-        self._update(event)
+        container = self.unit.get_container(self.name)
+        if not container.can_connect():
+            return
 
-    @log_event_handler(logger)
-    def _on_secret_changed(self, event):
-        """Handle secret changed hook.
+        if not self._state.is_ready():
+            return
+
+        # Create vault nonce secret on first run (originally in _on_install)
+        self._ensure_vault_nonce_secret()
+
+        if not container.exists("/app/scripts/start-worker.sh"):
+            logger.error(
+                "The workload container does not have the expected entrypoint script. Please refresh the charm with another valid image"
+            )
+            return
+
+        # Phase 1: Read inputs
+        if self.unit.is_leader():
+            # Handle database relation data (safe to poll - data in relation databag)
+            if isinstance(event, ops.RelationBrokenEvent) and event.relation.name == "database":
+                self._state.database_connection = None
+            else:
+                self.postgresql.update_db_relation_data_in_state()
+
+        # Phase 2: Compute new state
+        context = {}
+        auth_config = {}
+        charm_config_env = {}
+        try:
+            self._validate()
+            if self.config.get("environment"):
+                charm_config_env = self.create_env()
+            if self.config.get("auth-secret-id"):
+                auth_config = self.get_auth_config_from_juju_secret()
+        except ValueError:
+            return
+
+        logger.info("Configuring Temporal worker")
+
+        proxy_vars = {
+            "HTTP_PROXY": "JUJU_CHARM_HTTP_PROXY",
+            "HTTPS_PROXY": "JUJU_CHARM_HTTPS_PROXY",
+            "NO_PROXY": "JUJU_CHARM_NO_PROXY",
+        }
+
+        for key, env_var in proxy_vars.items():
+            value = os.environ.get(env_var)
+            if value:
+                context.update({key: value})
+
+        host = None
+        if self.host_info.host and self.host_info.port:
+            host = f"{self.host_info.host}:{self.host_info.port}"
+            if self._deprecated_host:
+                logger.warning(
+                    "The `host` config option is deprecated and will be removed in a future release; "
+                    "prefer the `temporal-host-info` relation. Ignoring `host` while relation data is present."
+                )
+        elif self._deprecated_host:
+            logger.warning(
+                "The `host` config option is deprecated and will be removed in a future release; "
+                "prefer the `temporal-host-info` relation."
+            )
+            host = self._deprecated_host
+        else:
+            return
+
+        context.update(
+            {
+                "TWC_HOST": host,
+                "TEMPORAL_HOST": host,
+            }
+        )
+
+        context.update(
+            {
+                convert_env_var(key, prefix="TWC_"): value
+                for key, value in self.config.items()
+                if key not in ["environment", "auth-secret-id", "host"]
+            }
+        )
+
+        context.update(
+            {
+                convert_env_var(key, prefix="TEMPORAL_"): value
+                for key, value in self.config.items()
+                if key not in ["environment", "auth-secret-id", "host"]
+            }
+        )
+
+        # Environment config (env/juju/vault) should override base charm config values.
+        if charm_config_env:
+            context.update(charm_config_env)
+
+        # Auth configs coming from a juju secret take precedence over those coming from config.
+        # Auth config options will be deprecated in favor of using juju user secrets.
+        if auth_config:
+            context.update(**auth_config)
+
+        context.update({"TWC_PROMETHEUS_PORT": PROMETHEUS_PORT, "TEMPORAL_PROMETHEUS_PORT": PROMETHEUS_PORT})
+
+        if self.model.get_relation("database") and self._state.database_connection:
+            context.update(
+                {
+                    "TEMPORAL_DB_HOST": self._state.database_connection.get("host"),
+                    "TEMPORAL_DB_PORT": self._state.database_connection.get("port"),
+                    "TEMPORAL_DB_PASSWORD": self._state.database_connection.get("password"),
+                    "TEMPORAL_DB_USER": self._state.database_connection.get("user"),
+                    "TEMPORAL_DB_TLS": self._state.database_connection.get("tls"),
+                }
+            )
+
+        # Phase 3: Write outputs (only if changed)
+        pebble_layer = {
+            "summary": "temporal worker layer",
+            "services": {
+                self.name: {
+                    "summary": "temporal worker",
+                    "command": "/app/scripts/start-worker.sh",
+                    "startup": "enabled",
+                    "override": "replace",
+                    "environment": context,
+                }
+            },
+        }
+
+        current_plan = container.get_plan().to_dict()
+        if current_plan.get("services", {}).get(self.name) != pebble_layer["services"][self.name]:
+            container.add_layer(self.name, pebble_layer, combine=True)
+            try:
+                container.replan()
+            except pebble.ChangeError as e:
+                logger.exception(f"Failed to replan pebble services: {e}")
+                return
+
+    def _ensure_vault_nonce_secret(self):
+        """Create vault nonce secret if it doesn't exist yet."""
+        try:
+            self.model.get_secret(label=VAULT_NONCE_SECRET_LABEL)
+        except Exception:
+            self.unit.add_secret(
+                {"nonce": secrets.token_hex(16)},
+                label=VAULT_NONCE_SECRET_LABEL,
+                description="Nonce for vault-kv relation",
+            )
+
+    def _on_collect_unit_status(self, event):
+        """Report unit status based on current state.
 
         Args:
-            event: The event triggered when the secret changed.
+            event: The CollectStatusEvent.
         """
-        self._update(event)
+        container = self.unit.get_container(self.name)
+        if not container.can_connect():
+            event.add_status(WaitingStatus("waiting for pebble api"))
+            return
 
-    @log_event_handler(logger)
-    def _on_update_status(self, event):
-        """Handle `update-status` events.
+        if not self._state.is_ready():
+            event.add_status(WaitingStatus("waiting for peer relation"))
+            return
 
-        Args:
-            event: The `update-status` event triggered at intervals.
-        """
-        should_update = self.postgresql.update_db_relation_data_in_state(event)
-        if should_update:
-            logger.info("updating charm to reflect new database connection info")
-            self._update(event)
+        if not container.exists("/app/scripts/start-worker.sh"):
+            event.add_status(BlockedStatus("Please refresh the charm with a valid worker image"))
             return
 
         try:
-            self._validate(event)
+            self._validate()
             environment_config = self.config.get("environment")
             if environment_config:
                 self.create_env()
+            if self.config.get("auth-secret-id"):
+                self.get_auth_config_from_juju_secret()
         except ValueError as err:
-            self.unit.status = BlockedStatus(str(err))
+            event.add_status(BlockedStatus(str(err)))
             return
 
-        container = self.unit.get_container(self.name)
+        # Check host availability
+        host = None
+        if self.host_info.host and self.host_info.port:
+            host = f"{self.host_info.host}:{self.host_info.port}"
+        elif self._deprecated_host:
+            host = self._deprecated_host
+
+        if not host:
+            event.add_status(
+                BlockedStatus(
+                    "temporal-host-info relation not established; set deprecated `host` config as fallback"
+                )
+            )
+            return
+
         valid_pebble_plan = self._validate_pebble_plan(container)
         if not valid_pebble_plan:
-            self._update(event)
+            event.add_status(WaitingStatus("waiting for pebble plan"))
             return
 
-        self.unit.status = ActiveStatus(
-            f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
+        # Check if the service is actually running
+        try:
+            service = container.get_service(self.name)
+            if not service.is_running():
+                event.add_status(WaitingStatus("waiting for pebble plan"))
+                return
+        except Exception:
+            event.add_status(WaitingStatus("waiting for pebble plan"))
+            return
+
+        event.add_status(
+            ActiveStatus(
+                f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
+            )
         )
 
     def _validate_pebble_plan(self, container):
@@ -285,11 +460,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             if not config_object.get(param):
                 raise ValueError(f"Invalid config: {param} value missing")
 
-    def _validate(self, event):  # noqa: C901
+    def _validate(self):  # noqa: C901
         """Validate that configuration and relations are valid and ready.
-
-        Args:
-            event: The event triggered when the relation changed.
 
         Raises:
             ValueError: in case of invalid configuration.
@@ -325,142 +497,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         if self.model.get_relation("database") and not self.config.get("db-name"):
             raise ValueError("Invalid config: db name value missing")
-
-    def _update(self, event):  # noqa: C901
-        """Update the Temporal worker configuration and replan its execution.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        container = self.unit.get_container(self.name)
-        if not container.can_connect():
-            event.defer()
-            self.unit.status = WaitingStatus("waiting for pebble api")
-            return
-
-        if not container.exists("/app/scripts/start-worker.sh"):
-            logger.error(
-                "The workload container does not have the expected entrypoint script. Please refresh the charm with another valid image"
-            )
-            self.unit.status = BlockedStatus("Please refresh the charm with a valid worker image")
-            return
-
-        context = {}
-        auth_config = {}
-        charm_config_env = {}
-        try:
-            self._validate(event)
-            if self.config.get("environment"):
-                charm_config_env = self.create_env()
-            if self.config.get("auth-secret-id"):
-                auth_config = self.get_auth_config_from_juju_secret()
-        except ValueError as err:
-            self.unit.status = BlockedStatus(str(err))
-            return
-
-        logger.info("Configuring Temporal worker")
-
-        proxy_vars = {
-            "HTTP_PROXY": "JUJU_CHARM_HTTP_PROXY",
-            "HTTPS_PROXY": "JUJU_CHARM_HTTPS_PROXY",
-            "NO_PROXY": "JUJU_CHARM_NO_PROXY",
-        }
-
-        for key, env_var in proxy_vars.items():
-            value = os.environ.get(env_var)
-            if value:
-                context.update({key: value})
-
-        host = None
-        if self.host_info.host and self.host_info.port:
-            host = f"{self.host_info.host}:{self.host_info.port}"
-            if self._deprecated_host:
-                logger.warning(
-                    "The `host` config option is deprecated and will be removed in a future release; "
-                    "prefer the `temporal-host-info` relation. Ignoring `host` while relation data is present."
-                )
-        elif self._deprecated_host:
-            logger.warning(
-                "The `host` config option is deprecated and will be removed in a future release; "
-                "prefer the `temporal-host-info` relation."
-            )
-            host = self._deprecated_host
-        else:
-            self.unit.status = BlockedStatus(
-                "temporal-host-info relation not established; set deprecated `host` config as fallback"
-            )
-            return
-
-        context.update(
-            {
-                "TWC_HOST": host,
-                "TEMPORAL_HOST": host,
-            }
-        )
-
-        context.update(
-            {
-                convert_env_var(key, prefix="TWC_"): value
-                for key, value in self.config.items()
-                if key not in ["environment", "auth-secret-id", "host"]
-            }
-        )
-
-        context.update(
-            {
-                convert_env_var(key, prefix="TEMPORAL_"): value
-                for key, value in self.config.items()
-                if key not in ["environment", "auth-secret-id", "host"]
-            }
-        )
-
-        # Environment config (env/juju/vault) should override base charm config values.
-        if charm_config_env:
-            context.update(charm_config_env)
-
-        # Auth configs coming from a juju secret take precedence over those coming from config.
-        # Auth config options will be deprecated in favor of using juju user secrets.
-        if auth_config:
-            context.update(**auth_config)
-
-        context.update({"TWC_PROMETHEUS_PORT": PROMETHEUS_PORT, "TEMPORAL_PROMETHEUS_PORT": PROMETHEUS_PORT})
-
-        if self.model.get_relation("database") and self._state.database_connection:
-            context.update(
-                {
-                    "TEMPORAL_DB_HOST": self._state.database_connection.get("host"),
-                    "TEMPORAL_DB_PORT": self._state.database_connection.get("port"),
-                    "TEMPORAL_DB_PASSWORD": self._state.database_connection.get("password"),
-                    "TEMPORAL_DB_USER": self._state.database_connection.get("user"),
-                    "TEMPORAL_DB_TLS": self._state.database_connection.get("tls"),
-                }
-            )
-
-        pebble_layer = {
-            "summary": "temporal worker layer",
-            "services": {
-                self.name: {
-                    "summary": "temporal worker",
-                    "command": "/app/scripts/start-worker.sh",
-                    "startup": "enabled",
-                    "override": "replace",
-                    "environment": context,
-                }
-            },
-        }
-
-        container.add_layer(self.name, pebble_layer, combine=True)
-
-        try:
-            container.replan()
-        except pebble.ChangeError as e:
-            logger.exception(f"Failed to replan pebble services: {e}")
-            self.unit.status = BlockedStatus(
-                "Failed to start pebble services - please consult logs for further details"
-            )
-            return
-
-        self.unit.status = MaintenanceStatus("replanning application")
 
 
 def convert_env_var(config_var, prefix="TWC_"):

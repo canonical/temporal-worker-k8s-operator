@@ -238,17 +238,13 @@ def test_image_without_entrypoint(context, state, temporal_worker_container):
 
 def test_error_replanning_pebble_plan(context, state, temporal_worker_container, pebble_change_error):
     with unittest.mock.patch("ops.Container.replan", side_effect=pebble_change_error):
-        state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
-        state_out = context.run(context.on.config_changed(), state_out)
+        state_out = context.run(context.on.config_changed(), state)
 
-    assert state_out.unit_status == ops.BlockedStatus(
-        "Failed to start pebble services - please consult logs for further details"
-    )
+    assert state_out.unit_status == ops.WaitingStatus("waiting for pebble plan")
 
 
 def test_ready(context, state, temporal_worker_container, namespace, queue):
-    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
-    state_out = context.run(context.on.config_changed(), state_out)
+    state_out = context.run(context.on.config_changed(), state)
 
     assert sorted(state_out.get_container("temporal-worker").plan.to_dict()) == sorted(
         {
@@ -268,10 +264,6 @@ def test_ready(context, state, temporal_worker_container, namespace, queue):
         state_out.get_container("temporal-worker").service_statuses["temporal-worker"]
         == ops.pebble.ServiceStatus.ACTIVE
     )
-    assert state_out.unit_status == ops.MaintenanceStatus("replanning application")
-
-    state_out = context.run(context.on.update_status(), state_out)
-
     assert state_out.unit_status == ops.ActiveStatus(f"worker listening to namespace {namespace!r} on queue {queue!r}")
 
 
@@ -287,8 +279,7 @@ def test_invalid_juju_secret(
         },
     )
 
-    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
-    state_out = context.run(context.on.config_changed(), state_out)
+    state_out = context.run(context.on.config_changed(), state)
 
     assert state_out.unit_status == ops.BlockedStatus("Invalid config: oidc-auth-type value missing")
 
@@ -305,8 +296,7 @@ def test_auth_juju_secret(
         },
     )
 
-    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
-    state_out = context.run(context.on.config_changed(), state_out)
+    state_out = context.run(context.on.config_changed(), state)
 
     expected_env = {**WANT_ENV}
     expected_env.update(**WANT_ENV_AUTH)
@@ -329,10 +319,6 @@ def test_auth_juju_secret(
         state_out.get_container("temporal-worker").service_statuses["temporal-worker"]
         == ops.pebble.ServiceStatus.ACTIVE
     )
-    assert state_out.unit_status == ops.MaintenanceStatus("replanning application")
-
-    state_out = context.run(context.on.update_status(), state_out)
-
     assert state_out.unit_status == ops.ActiveStatus(f"worker listening to namespace {namespace!r} on queue {queue!r}")
 
 
