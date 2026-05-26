@@ -195,6 +195,19 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             self._update(event)
             return
 
+        try:
+            service = container.get_service(self.name)
+            if not service.is_running():
+                logger.error(
+                    "temporal-worker service is not running; it may be caught in a crash/restart loop - check logs for details"
+                )
+                self.unit.status = BlockedStatus(
+                    "temporal-worker service is not running; check logs for crash details"
+                )
+                return
+        except pebble.APIError as e:
+            logger.warning(f"Could not retrieve service status: {e}")
+
         self.unit.status = ActiveStatus(
             f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
         )

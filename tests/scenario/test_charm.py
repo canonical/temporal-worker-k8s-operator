@@ -275,6 +275,24 @@ def test_ready(context, state, temporal_worker_container, namespace, queue):
     assert state_out.unit_status == ops.ActiveStatus(f"worker listening to namespace {namespace!r} on queue {queue!r}")
 
 
+def test_service_crash_restart_loop_detected(context, state, temporal_worker_container, namespace, queue):
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+    state_out = context.run(context.on.config_changed(), state_out)
+
+    # Simulate the service having crashed (pebble in backoff between restarts)
+    crashed_container = dataclasses.replace(
+        state_out.get_container("temporal-worker"),
+        service_statuses={"temporal-worker": ops.pebble.ServiceStatus.INACTIVE},
+    )
+    state_out = dataclasses.replace(state_out, containers=[crashed_container])
+
+    state_out = context.run(context.on.update_status(), state_out)
+
+    assert state_out.unit_status == ops.BlockedStatus(
+        "temporal-worker service is not running; check logs for crash details"
+    )
+
+
 def test_invalid_juju_secret(
     context, state, temporal_worker_container, config, missing_oidc_auth_type_secret, vault_nonce_secret
 ):
