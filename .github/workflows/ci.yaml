@@ -28,7 +28,7 @@ jobs:
       contents: write
     secrets: inherit
     with:
-      release-channel: "1.0/edge"
+      release-channel: "2.0/edge"
       charm-path: "."
       charmcraft-channel: "3.x/candidate"
       runners: '["ubuntu-latest"]'
