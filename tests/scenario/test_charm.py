@@ -10,6 +10,8 @@ import ops
 import ops.testing
 import pytest
 
+from charm import TemporalWorkerK8SOperatorCharm
+
 logger = logging.getLogger(__name__)
 
 CONFIG = {
@@ -290,6 +292,40 @@ def test_service_crash_restart_loop_detected(context, state, temporal_worker_con
 
     assert state_out.unit_status == ops.BlockedStatus(
         "temporal-worker service is not running; check logs for crash details"
+    )
+
+
+def test_eviction_loop_detected_in_pebble_logs(context, state, temporal_worker_container):
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+    state_out = context.run(context.on.config_changed(), state_out)
+
+    # Service is ACTIVE (the worker keeps running despite the eviction error),
+    # but pebble logs contain the Temporal SDK eviction sentinel.
+    with unittest.mock.patch.object(
+        TemporalWorkerK8SOperatorCharm,
+        "_has_eviction_loop_error",
+        return_value=True,
+    ):
+        state_out = context.run(context.on.update_status(), state_out)
+
+    assert state_out.unit_status == ops.BlockedStatus(
+        "temporal-worker: workflow eviction loop detected - restart required"
+    )
+
+
+def test_no_eviction_loop_sets_active(context, state, temporal_worker_container, namespace, queue):
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+    state_out = context.run(context.on.config_changed(), state_out)
+
+    with unittest.mock.patch.object(
+        TemporalWorkerK8SOperatorCharm,
+        "_has_eviction_loop_error",
+        return_value=False,
+    ):
+        state_out = context.run(context.on.update_status(), state_out)
+
+    assert state_out.unit_status == ops.ActiveStatus(
+        f"worker listening to namespace {namespace!r} on queue {queue!r}"
     )
 
 

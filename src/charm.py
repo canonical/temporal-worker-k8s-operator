@@ -208,6 +208,17 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         except pebble.APIError as e:
             logger.warning(f"Could not retrieve service status: {e}")
 
+        if self._has_eviction_loop_error(container):
+            logger.error(
+                "Temporal SDK workflow eviction loop detected in pebble logs: "
+                "the worker has stuck slots and may not complete workflow tasks. "
+                "Restart the worker to recover (juju run temporal-worker-k8s/<unit> restart)."
+            )
+            self.unit.status = BlockedStatus(
+                "temporal-worker: workflow eviction loop detected - restart required"
+            )
+            return
+
         self.unit.status = ActiveStatus(
             f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
         )
@@ -225,6 +236,39 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             plan = container.get_plan().to_dict()
             return bool(plan and plan["services"].get(self.name, {}))
         except pebble.ConnectionError:
+            return False
+
+    def _has_eviction_loop_error(self, container) -> bool:
+        """Scan recent pebble service logs for the Temporal SDK workflow eviction loop error.
+
+        When a workflow task deadlocks (e.g. due to a blocking call inside the workflow
+        coroutine) the Temporal SDK fails to cleanly evict the cached workflow state and
+        logs the following at ERROR level:
+
+          "Failed running eviction job for run ID <X>, continually retrying eviction.
+           Since eviction could not be processed, this worker may not complete and the
+           slot may remain forever used unless it eventually completes."
+
+        The service continues running (pebble status stays ACTIVE), so this condition
+        is invisible to a simple service-status check.  This method reads the last 200
+        log lines from the pebble log API and checks for the sentinel phrase.
+
+        Args:
+            container: application container
+
+        Returns:
+            True if the eviction loop error was found in recent service logs.
+        """
+        try:
+            response = container._pebble._request_raw(
+                "GET",
+                "/v1/logs",
+                query={"services": self.name, "n": "200"},
+            )
+            log_data = response.read().decode("utf-8", errors="replace")
+            return "continually retrying eviction" in log_data
+        except Exception as e:
+            logger.debug(f"Could not scan pebble logs for eviction error: {e}")
             return False
 
     def get_auth_config_from_juju_secret(self) -> dict:
