@@ -261,6 +261,13 @@ def test_ready(context, state, temporal_worker_container, namespace, queue):
                     "environment": WANT_ENV,
                 },
             },
+            "checks": {
+                "start-worker-check": {
+                    "override": "replace",
+                    "threshold": 3,
+                    "exec": {"command": "pgrep -f start-worker.sh"},
+                }
+            },
         }
     )
 
@@ -322,6 +329,13 @@ def test_auth_juju_secret(
                     "environment": expected_env,
                 },
             },
+            "checks": {
+                "start-worker-check": {
+                    "override": "replace",
+                    "threshold": 3,
+                    "exec": {"command": "pgrep -f start-worker.sh"},
+                }
+            },
         }
     )
 
@@ -350,6 +364,13 @@ def test_vault_relation(context, state, temporal_worker_container):
                     "override": "replace",
                     "environment": WANT_ENV,
                 },
+            },
+            "checks": {
+                "start-worker-check": {
+                    "override": "replace",
+                    "threshold": 3,
+                    "exec": {"command": "pgrep -f start-worker.sh"},
+                }
             },
         }
     )
@@ -481,6 +502,13 @@ def test_valid_environment_config(context, state, temporal_worker_container, con
                             },
                         },
                     },
+                },
+                "checks": {
+                    "start-worker-check": {
+                        "override": "replace",
+                        "threshold": 3,
+                        "exec": {"command": "pgrep -f start-worker.sh"},
+                    }
                 },
             }
         )
@@ -621,6 +649,13 @@ def test_db_relation(context, state, temporal_worker_container):
                         "TWC_DB_NAME": "temporal-worker-k8s_db",
                     },
                 },
+            },
+            "checks": {
+                "start-worker-check": {
+                    "override": "replace",
+                    "threshold": 3,
+                    "exec": {"command": "pgrep -f start-worker.sh"},
+                }
             },
         }
     )

@@ -66,6 +66,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self.framework.observe(self.on.restart_action, self._on_restart)
         self.framework.observe(self.on.update_status, self._on_update_status)
         self.framework.observe(self.on.install, self._on_install)
+        self.framework.observe(self.on.temporal_worker_pebble_check_failed, self._on_pebble_check_failed)
+        self.framework.observe(self.on.temporal_worker_pebble_check_recovered, self._on_pebble_check_recovered)
         self.framework.observe(self.on.secret_changed, self._on_secret_changed)
 
         # Vault
@@ -195,6 +197,37 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             self._update(event)
             return
 
+        try:
+            service = container.get_service(self.name)
+            if not service.is_running():
+                logger.error(
+                    "temporal-worker service is not running; it may be caught in a crash/restart loop - check logs for details"
+                )
+                self.unit.status = BlockedStatus("temporal-worker service is not running; check logs for crash details")
+                return
+        except pebble.APIError as e:
+            logger.warning(f"Could not retrieve service status: {e}")
+
+        self.unit.status = ActiveStatus(
+            f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
+        )
+
+    @log_event_handler(logger)
+    def _on_pebble_check_failed(self, event):
+        """Handle pebble check failed event.
+
+        Args:
+            event: The event triggered when the pebble check fails.
+        """
+        self.unit.status = BlockedStatus("temporal-worker service is not running; check logs for crash details")
+
+    @log_event_handler(logger)
+    def _on_pebble_check_recovered(self, event):
+        """Handle pebble check recovered event.
+
+        Args:
+            event: The event triggered when the pebble check recovers.
+        """
         self.unit.status = ActiveStatus(
             f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
         )
@@ -445,6 +478,13 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                     "startup": "enabled",
                     "override": "replace",
                     "environment": context,
+                }
+            },
+            "checks": {
+                "start-worker-check": {
+                    "override": "replace",
+                    "threshold": 3,
+                    "exec": {"command": "pgrep -f start-worker.sh"},
                 }
             },
         }
