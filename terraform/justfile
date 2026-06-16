@@ -11,7 +11,7 @@ stop-local-registry:
 
 [private]
 start-local-registry: (stop-local-registry)
-    docker run -d -p 5000:5000 --name registry registry:2.7
+    docker run -d -p 5000:5000 --name registry registry:2
 
 [private]
 build-and-push-image: (start-local-registry)
