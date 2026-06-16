@@ -11,7 +11,20 @@ stop-local-registry:
 
 [private]
 start-local-registry: (stop-local-registry)
-    docker run -d --network host --name registry registry:2
+    #!/usr/bin/bash
+    set -euxo pipefail
+    for attempt in {1..5}; do
+        if docker run -d -p 5000:5000 --name registry registry:2; then
+            break
+        fi
+        if [ "${attempt}" -eq 5 ]; then
+            echo "Failed to start local registry after ${attempt} attempts"
+            exit 1
+        fi
+        docker rm -f registry 2>/dev/null || true
+        echo "Failed to start registry (attempt ${attempt}); retrying in 5s..."
+        sleep 5
+    done
 
 [private]
 build-and-push-image: (start-local-registry)
