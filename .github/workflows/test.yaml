@@ -5,5 +5,8 @@ on:
 
 jobs:
   unit-tests:
+    permissions:
+      contents: read
+      issues: write
     uses: canonical/operator-workflows/.github/workflows/test.yaml@main
     secrets: inherit
