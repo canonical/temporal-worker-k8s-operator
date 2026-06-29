@@ -54,7 +54,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         """
         super().__init__(*args)
         self._state = State(self.app, lambda: self.model.get_relation("peer"))
-        self.name = "temporal-worker"
+        self._service_name = "temporal-worker"
 
         self.database = DatabaseRequires(
             self, relation_name="database", database_name=self.model.config.get("db-name", None)
@@ -140,13 +140,13 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         Args:
             event:The event triggered by the restart action
         """
-        container = self.unit.get_container(self.name)
+        container = self.unit.get_container(self._service_name)
         if not container.can_connect():
             event.fail("Failed to connect to the container")
             return
 
         self.unit.status = MaintenanceStatus("restarting worker")
-        container.restart(self.name)
+        container.restart(self._service_name)
 
         event.set_results({"result": "worker successfully restarted"})
 
@@ -191,7 +191,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             self.unit.status = BlockedStatus(str(err))
             return
 
-        container = self.unit.get_container(self.name)
+        container = self.unit.get_container(self._service_name)
         valid_pebble_plan = self._validate_pebble_plan(container)
         if not valid_pebble_plan:
             self._update(event)
@@ -205,7 +205,17 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         Args:
             event: The event triggered when the pebble check fails.
         """
-        self.unit.status = BlockedStatus("temporal-worker service is not running; check logs for crash details")
+        if event.info.name == "eviction-loop-check":
+            logger.error(
+                "Temporal SDK workflow eviction loop detected: the worker has stuck slots "
+                "and may not complete workflow tasks. "
+                "Fix the workflow code before restarting the worker."
+            )
+            self.unit.status = BlockedStatus(
+                "eviction loop detected - fix workflow code before restarting"
+            )
+        else:
+            self.unit.status = BlockedStatus("temporal-worker service is not running; check logs for crash details")
 
     @log_event_handler(logger)
     def _on_pebble_check_recovered(self, event):
@@ -229,7 +239,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         """
         try:
             plan = container.get_plan().to_dict()
-            return bool(plan and plan["services"].get(self.name, {}))
+            return bool(plan and plan["services"].get(self._service_name, {}))
         except pebble.ConnectionError:
             return False
 
@@ -351,7 +361,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         Args:
             event: The event triggered when the relation changed.
         """
-        container = self.unit.get_container(self.name)
+        container = self.unit.get_container(self._service_name)
         if not container.can_connect():
             event.defer()
             self.unit.status = WaitingStatus("waiting for pebble api")
@@ -458,7 +468,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         pebble_layer = {
             "summary": "temporal worker layer",
             "services": {
-                self.name: {
+                self._service_name: {
                     "summary": "temporal worker",
                     "command": "/app/scripts/start-worker.sh",
                     "startup": "enabled",
@@ -471,11 +481,20 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                     "override": "replace",
                     "threshold": 3,
                     "exec": {"command": "pgrep -f start-worker.sh"},
-                }
+                },
+                # NOTE: this eviction log only works for the Go and Python SDKs specifically
+                "eviction-loop-check": {
+                    "override": "replace",
+                    "period": "5m",
+                    "threshold": 1,
+                    "exec": {
+                        "command": f"bash -c '! pebble logs -n 50 {self._service_name} 2>/dev/null | grep -q \"continually retrying eviction\"'"
+                    },
+                },
             },
         }
 
-        container.add_layer(self.name, pebble_layer, combine=True)
+        container.add_layer(self._service_name, pebble_layer, combine=True)
 
         try:
             container.replan()
