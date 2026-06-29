@@ -682,7 +682,7 @@ def test_eviction_loop_check_detected(context, state, temporal_worker_container)
         state_out = context.run(context.on.pebble_check_failed(container, check_info), state_out)
 
     assert state_out.unit_status == ops.BlockedStatus(
-        "temporal-worker: eviction loop detected - fix workflow code before restarting"
+        "eviction loop detected - fix workflow code before restarting"
     )
 
 
