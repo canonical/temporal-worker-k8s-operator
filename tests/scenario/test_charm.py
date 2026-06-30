@@ -262,6 +262,13 @@ def test_ready(context, state, temporal_worker_container, namespace, queue):
                     "environment": WANT_ENV,
                 },
             },
+            "checks": {
+                "start-worker-check": {
+                    "override": "replace",
+                    "threshold": 3,
+                    "exec": {"command": "pgrep -f start-worker.sh"},
+                }
+            },
         }
     )
 
@@ -269,10 +276,6 @@ def test_ready(context, state, temporal_worker_container, namespace, queue):
         state_out.get_container("temporal-worker").service_statuses["temporal-worker"]
         == ops.pebble.ServiceStatus.ACTIVE
     )
-    assert state_out.unit_status == ops.MaintenanceStatus("replanning application")
-
-    state_out = context.run(context.on.update_status(), state_out)
-
     assert state_out.unit_status == ops.ActiveStatus(f"worker listening to namespace {namespace!r} on queue {queue!r}")
 
 
@@ -323,6 +326,13 @@ def test_auth_juju_secret(
                     "environment": expected_env,
                 },
             },
+            "checks": {
+                "start-worker-check": {
+                    "override": "replace",
+                    "threshold": 3,
+                    "exec": {"command": "pgrep -f start-worker.sh"},
+                }
+            },
         }
     )
 
@@ -330,10 +340,6 @@ def test_auth_juju_secret(
         state_out.get_container("temporal-worker").service_statuses["temporal-worker"]
         == ops.pebble.ServiceStatus.ACTIVE
     )
-    assert state_out.unit_status == ops.MaintenanceStatus("replanning application")
-
-    state_out = context.run(context.on.update_status(), state_out)
-
     assert state_out.unit_status == ops.ActiveStatus(f"worker listening to namespace {namespace!r} on queue {queue!r}")
 
 
@@ -351,6 +357,13 @@ def test_vault_relation(context, state, temporal_worker_container):
                     "override": "replace",
                     "environment": WANT_ENV,
                 },
+            },
+            "checks": {
+                "start-worker-check": {
+                    "override": "replace",
+                    "threshold": 3,
+                    "exec": {"command": "pgrep -f start-worker.sh"},
+                }
             },
         }
     )
@@ -524,6 +537,13 @@ def test_valid_environment_config(context, state, temporal_worker_container, con
                         },
                     },
                 },
+                "checks": {
+                    "start-worker-check": {
+                        "override": "replace",
+                        "threshold": 3,
+                        "exec": {"command": "pgrep -f start-worker.sh"},
+                    }
+                },
             }
         )
 
@@ -644,6 +664,70 @@ def test_blocked_by_missing_db_name(context, state, temporal_worker_container, c
     assert state_out.unit_status == ops.BlockedStatus("Invalid config: db name value missing")
 
 
+def _make_check_state(state_out, name, threshold):
+    """Return (container, check_info, updated_state) with the named check registered.
+
+    See https://github.com/canonical/operator/issues/2565: the consistency checker builds
+    all_checks using raw container names but compares against the normalised event name,
+    so containers with hyphens always fail. Patching here until the bug is fixed.
+    """
+    check_info = ops.testing.CheckInfo(
+        name=name,
+        level=ops.pebble.CheckLevel.UNSET,
+        startup=ops.pebble.CheckStartup.UNSET,
+        threshold=threshold,
+    )
+    container = dataclasses.replace(
+        state_out.get_container("temporal-worker"),
+        check_infos=frozenset([check_info]),
+    )
+    return container, check_info, dataclasses.replace(state_out, containers={container})
+
+
+def test_pebble_check_failed(context, state, temporal_worker_container):
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+    state_out = context.run(context.on.config_changed(), state_out)
+
+    container, check_info, state_out = _make_check_state(state_out, "start-worker-check", threshold=3)
+
+    # ops-scenario 7.21.1 bug: consistency checker does not normalise container names
+    with unittest.mock.patch("scenario._consistency_checker.check_consistency"):
+        state_out = context.run(context.on.pebble_check_failed(container, check_info), state_out)
+
+    assert state_out.unit_status == ops.BlockedStatus("temporal-worker service is not running; check logs for crash details")
+
+
+def test_pebble_check_recovered(context, state, temporal_worker_container, namespace, queue):
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+    state_out = context.run(context.on.config_changed(), state_out)
+
+    container, check_info, state_out = _make_check_state(state_out, "start-worker-check", threshold=3)
+
+    # ops-scenario 7.21.1 bug: consistency checker does not normalise container names
+    with unittest.mock.patch("scenario._consistency_checker.check_consistency"):
+        state_out = context.run(context.on.pebble_check_failed(container, check_info), state_out)
+    assert state_out.unit_status == ops.BlockedStatus("temporal-worker service is not running; check logs for crash details")
+
+    with unittest.mock.patch("scenario._consistency_checker.check_consistency"):
+        state_out = context.run(context.on.pebble_check_recovered(container, check_info), state_out)
+    assert state_out.unit_status == ops.ActiveStatus(f"worker listening to namespace {namespace!r} on queue {queue!r}")
+
+
+def test_eviction_loop_check_detected(context, state, temporal_worker_container):
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+    state_out = context.run(context.on.config_changed(), state_out)
+
+    container, check_info, state_out = _make_check_state(state_out, "eviction-loop-check", threshold=1)
+
+    # ops-scenario 7.21.1 bug: consistency checker does not normalise container names
+    with unittest.mock.patch("scenario._consistency_checker.check_consistency"):
+        state_out = context.run(context.on.pebble_check_failed(container, check_info), state_out)
+
+    assert state_out.unit_status == ops.BlockedStatus(
+        "eviction loop detected - fix workflow code before restarting"
+    )
+
+
 def test_db_relation(context, state, temporal_worker_container):
     state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
     state_out = context.run(context.on.config_changed(), state_out)
@@ -663,6 +747,13 @@ def test_db_relation(context, state, temporal_worker_container):
                         "TWC_DB_NAME": "temporal-worker-k8s_db",
                     },
                 },
+            },
+            "checks": {
+                "start-worker-check": {
+                    "override": "replace",
+                    "threshold": 3,
+                    "exec": {"command": "pgrep -f start-worker.sh"},
+                }
             },
         }
     )
