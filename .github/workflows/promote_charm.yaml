@@ -7,12 +7,12 @@ on:
         type: choice
         description: 'Origin Channel'
         options:
-        - latest/edge
+        - 1.0/edge
       destination-channel:
         type: choice
         description: 'Destination Channel'
         options:
-        - latest/stable
+        - 1.0/stable
     secrets:
       CHARMHUB_TOKEN:
         required: true
@@ -23,4 +23,8 @@ jobs:
     with:
       origin-channel: ${{ github.event.inputs.origin-channel }}
       destination-channel: ${{ github.event.inputs.destination-channel }}
+      # Pin the base explicitly
+      base-name: ubuntu
+      base-channel: "24.04"
+      base-architecture: amd64
     secrets: inherit
