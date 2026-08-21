@@ -13,18 +13,23 @@ on:
         description: 'Destination Channel'
         options:
         - 1.0/stable
-    secrets:
-      CHARMHUB_TOKEN:
-        required: true
 
 jobs:
   promote-charm:
-    uses: canonical/operator-workflows/.github/workflows/promote_charm.yaml@main
-    with:
-      origin-channel: ${{ github.event.inputs.origin-channel }}
-      destination-channel: ${{ github.event.inputs.destination-channel }}
-      # Pin the base explicitly
-      base-name: ubuntu
-      base-channel: "24.04"
-      base-architecture: amd64
-    secrets: inherit
+    name: Promote charm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Release charm to channel
+        uses: canonical/charming-actions/release-charm@2.7.0
+        with:
+          credentials: ${{ secrets.CHARMHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          origin-channel: ${{ github.event.inputs.origin-channel }}
+          destination-channel: ${{ github.event.inputs.destination-channel }}
+          base-name: ubuntu
+          base-channel: "24.04"
+          base-architecture: amd64
+          # The action defaults to latest/edge, where charmcraft 4.4 rejects the
+          # Charmhub credentials with "Invalid macaroon".
+          charmcraft-channel: latest/stable
