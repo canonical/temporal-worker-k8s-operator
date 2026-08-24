@@ -18,6 +18,8 @@ jobs:
   promote-charm:
     name: Promote charm
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Release charm to channel
