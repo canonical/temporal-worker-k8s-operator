@@ -14,7 +14,7 @@ description: |
   This charm provides the Temporal worker which can connect to the Temporal
   server via https to execute workflows.
 maintainers:
-  - Commercial Systems <jaas-crew@lists.canonical.com>
+  - Workflows Team <workflows-team@groups.canonical.com>
 source: https://github.com/canonical/temporal-worker-k8s-operator
 docs: https://github.com/canonical/temporal-worker-k8s-operator
 tags:
