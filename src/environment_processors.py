@@ -73,6 +73,7 @@ def process_juju_variables(charm, parsed_environment_data):
         except SecretNotFoundError as e:
             raise ValueError(f"Juju secret `{secret_id}` not found") from e
         except ModelError as e:
+            logger.error(f"Unable to read Juju secret `{secret_id}`: {e}")
             raise ValueError(f"Access permission not granted to charm for secret `{secret_id}`") from e
         except KeyError as e:
             logger.error(f"Error parsing secrets env: {e}")
