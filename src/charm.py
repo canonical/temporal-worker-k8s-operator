@@ -204,8 +204,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             return
 
         # Configuration, secrets and the pebble plan are valid and no check is failing, so any other status is stale
-        # (e.g. left behind by a transient failure to read a Juju secret). Nothing else would clear it until the next
-        # config-changed, so reconcile now.
+        # (e.g. left behind by a transient failure to read a Juju secret). Nothing else would clear it until
+        # the next config-changed, so reconcile now.
         logger.info(f"unit status {self.unit.status!r} is stale, reconciling")
         self._update(event)
 
