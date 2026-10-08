@@ -147,6 +147,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         self.unit.status = MaintenanceStatus("restarting worker")
         container.restart(self._service_name)
+        self._set_active_status()
 
         event.set_results({"result": "worker successfully restarted"})
 
@@ -197,6 +198,16 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             self._update(event)
             return
 
+        if isinstance(self.unit.status, ActiveStatus) or self._has_failing_pebble_checks(container):
+            # Either there is nothing to recover from, or a failing pebble check (crash or eviction loop) keeps the
+            # unit Blocked until `_on_pebble_check_recovered` runs.
+            return
+
+        # Configuration, secrets and the pebble plan are valid and no check is failing, so any other status is stale
+        # (e.g. left behind by a transient failure to read a Juju secret). Nothing else would clear it until
+        # the next config-changed, so reconcile now.
+        logger.info(f"unit status {self.unit.status!r} is stale, reconciling")
+        self._update(event)
 
     @log_event_handler(logger)
     def _on_pebble_check_failed(self, event):
@@ -224,9 +235,24 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         Args:
             event: The event triggered when the pebble check recovers.
         """
+        self._set_active_status()
+
+    def _set_active_status(self):
+        """Set Active status with the configured namespace and queue."""
         self.unit.status = ActiveStatus(
             f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
         )
+
+    def _has_failing_pebble_checks(self, container):
+        """Check whether any pebble check of the container is currently failing.
+
+        Args:
+            container: application container
+
+        Returns:
+            bool, True if at least one pebble check is down
+        """
+        return any(info.status == pebble.CheckStatus.DOWN for info in container.get_checks().values())
 
     def _validate_pebble_plan(self, container):
         """Validate Temporal worker pebble plan.
@@ -505,9 +531,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             )
             return
 
-        self.unit.status = ActiveStatus(
-            f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
-        )
+        self._set_active_status()
 
 
 def convert_env_var(config_var, prefix="TWC_"):
