@@ -715,6 +715,17 @@ def test_update_status_recovers_after_transient_secret_error(
     assert state_out.unit_status == active_status
 
 
+def test_restart_action_restores_active_immediately(
+    context, state, temporal_worker_container, namespace, queue
+):
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+    state_out = context.run(context.on.config_changed(), state_out)
+
+    state_out = context.run(context.on.action("restart"), state_out)
+
+    assert state_out.unit_status == ops.ActiveStatus(f"worker listening to namespace {namespace!r} on queue {queue!r}")
+
+
 def test_update_status_restores_active_after_restart_action(
         context, state, temporal_worker_container, namespace, queue
 ):

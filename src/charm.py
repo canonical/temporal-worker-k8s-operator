@@ -147,6 +147,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         self.unit.status = MaintenanceStatus("restarting worker")
         container.restart(self._service_name)
+        self._set_active_status()
 
         event.set_results({"result": "worker successfully restarted"})
 
@@ -234,6 +235,10 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         Args:
             event: The event triggered when the pebble check recovers.
         """
+        self._set_active_status()
+
+    def _set_active_status(self):
+        """Set Active status with the configured namespace and queue."""
         self.unit.status = ActiveStatus(
             f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
         )
@@ -526,9 +531,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             )
             return
 
-        self.unit.status = ActiveStatus(
-            f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
-        )
+        self._set_active_status()
 
 
 def convert_env_var(config_var, prefix="TWC_"):
