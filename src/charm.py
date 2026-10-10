@@ -84,7 +84,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             self,
             relation_name="metrics-endpoint",
             jobs=[{"static_configs": [{"targets": [f"*:{PROMETHEUS_PORT}"]}]}],
-            refresh_event=self.on.config_changed,
+            # pebble-ready fires when the pod restarts with a new IP; config-changed does not.
+            refresh_event=[self.on.config_changed, self.on.temporal_worker_pebble_ready],
         )
 
         # Loki

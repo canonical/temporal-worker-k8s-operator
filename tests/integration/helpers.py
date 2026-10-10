@@ -273,9 +273,9 @@ async def setup_temporal_ecosystem(ops_test: OpsTest):
     """
     await asyncio.gather(
         ops_test.model.deploy(
-            APP_NAME_SERVER, channel="1.23/edge", config={"num-history-shards": 1}, base="ubuntu@24.04"
+            APP_NAME_SERVER, channel="1.23/stable", config={"num-history-shards": 1}, base="ubuntu@24.04"
         ),
-        ops_test.model.deploy(APP_NAME_ADMIN, channel="1.23/edge"),
+        ops_test.model.deploy(APP_NAME_ADMIN, channel="1.23/stable", base="ubuntu@24.04"),
         ops_test.model.deploy("postgresql-k8s", channel="14/stable", trust=True, revision=381),
     )
 

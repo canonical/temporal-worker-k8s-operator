@@ -1,0 +1,100 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# Prometheus injects Juju topology label matchers into every selector below
+# (via the prometheus_scrape library), so these rules only match this application.
+groups:
+  - name: temporal-worker
+    rules:
+      - alert: TemporalWorkerDown
+        expr: up < 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Temporal worker {{ $labels.juju_unit }} is down"
+          description: >-
+            Prometheus has been unable to scrape the metrics endpoint of
+            {{ $labels.juju_unit }} in model {{ $labels.juju_model }} for more
+            than 5 minutes. The worker process is likely not running.
+
+      - alert: TemporalWorkerMetricsMissing
+        expr: absent(up)
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Temporal worker {{ $labels.juju_application }} has no scrape targets"
+          description: >-
+            No metrics targets have been reported for {{ $labels.juju_application }}
+            in model {{ $labels.juju_model }} for more than 10 minutes.
+
+      - alert: TemporalWorkerNoPollers
+        expr: >-
+          (
+            sum by (juju_model, juju_model_uuid, juju_application, juju_unit) (temporal_num_pollers) == 0
+          )
+          or
+          (
+            max by (juju_model, juju_model_uuid, juju_application, juju_unit) (up == 1)
+            unless on (juju_model, juju_model_uuid, juju_application, juju_unit)
+            sum by (juju_model, juju_model_uuid, juju_application, juju_unit) (temporal_num_pollers)
+          )
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Temporal worker {{ $labels.juju_unit }} has no active pollers"
+          description: >-
+            {{ $labels.juju_unit }} in model {{ $labels.juju_model }} is running but
+            has had no active task queue pollers for more than 5 minutes, so it is
+            not picking up any workflow or activity tasks.
+
+      # Failed polls are retried with a long backoff (minutes), so a short rate
+      # window can contain no attempts at all; use a wide window for the ratio.
+      - alert: TemporalWorkerPollFailuresHigh
+        expr: >-
+          (
+            sum by (juju_model, juju_model_uuid, juju_application, juju_unit, namespace, task_queue)
+              (rate(temporal_long_request_failure{operation=~"Poll.*TaskQueue"}[15m]))
+            /
+            sum by (juju_model, juju_model_uuid, juju_application, juju_unit, namespace, task_queue)
+              (rate(temporal_long_request{operation=~"Poll.*TaskQueue"}[15m]))
+          ) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Temporal worker {{ $labels.juju_unit }} poll requests are failing"
+          description: >-
+            {{ $value | humanizePercentage }} of task queue polls from
+            {{ $labels.juju_unit }} on queue {{ $labels.task_queue }}
+            (namespace {{ $labels.namespace }}) have failed over the last 15 minutes.
+
+      # A healthy worker completes a long poll at least every ~70s per poller (even
+      # when there is no work), so zero successful polls over 3m means it cannot
+      # poll. Fires ~5m after polling stops (3m window + 2m pending).
+      - alert: TemporalWorkerUnableToPoll
+        expr: >-
+          (
+            sum by (juju_model, juju_model_uuid, juju_application, juju_unit, namespace, task_queue)
+              (increase(temporal_long_request{operation=~"Poll.*TaskQueue"}[3m]))
+            -
+            (
+              sum by (juju_model, juju_model_uuid, juju_application, juju_unit, namespace, task_queue)
+                (increase(temporal_long_request_failure{operation=~"Poll.*TaskQueue"}[3m]))
+              or
+              sum by (juju_model, juju_model_uuid, juju_application, juju_unit, namespace, task_queue)
+                (increase(temporal_long_request{operation=~"Poll.*TaskQueue"}[3m])) * 0
+            )
+          ) < 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Temporal worker {{ $labels.juju_unit }} is unable to poll for tasks"
+          description: >-
+            {{ $labels.juju_unit }} has not completed a single successful poll on
+            queue {{ $labels.task_queue }} (namespace {{ $labels.namespace }})
+            in the last 5 minutes. The worker is most likely unable to reach or
+            authenticate with the Temporal server.
