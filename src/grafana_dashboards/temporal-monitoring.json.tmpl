@@ -29,6 +29,504 @@
           "x": 0,
           "y": 0
         },
+        "id": 60,
+        "panels": [],
+        "title": "Worker Health",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prometheusds}"
+        },
+        "description": "Whether Prometheus can scrape the worker's metrics endpoint. DOWN means the worker process is not running or not reachable.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "0": {
+                    "color": "red",
+                    "index": 1,
+                    "text": "DOWN"
+                  },
+                  "1": {
+                    "color": "green",
+                    "index": 0,
+                    "text": "UP"
+                  }
+                }
+              }
+            ],
+            "noValue": "NO DATA",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 8,
+          "x": 0,
+          "y": 1
+        },
+        "id": 61,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name"
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${prometheusds}"
+            },
+            "expr": "max by (juju_unit) (up{juju_charm=\"temporal-worker-k8s\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\",juju_unit=~\"$juju_unit\"})",
+            "legendFormat": "{{juju_unit}}",
+            "refId": "A",
+            "instant": true
+          }
+        ],
+        "title": "Worker Up",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prometheusds}"
+        },
+        "description": "Number of pollers currently running, across all poller types. Zero means the worker is not requesting any tasks from the Temporal server.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "noValue": "NO DATA",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 8,
+          "x": 8,
+          "y": 1
+        },
+        "id": 62,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name"
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${prometheusds}"
+            },
+            "expr": "sum by (juju_unit) (temporal_num_pollers{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\",juju_unit=~\"$juju_unit\"})",
+            "legendFormat": "{{juju_unit}}",
+            "refId": "A"
+          }
+        ],
+        "title": "Active Pollers",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prometheusds}"
+        },
+        "description": "Share of task queue poll requests (workflow and activity) that succeeded over the last 5 minutes. Pollers retry on failure, so a worker that cannot reach the server still reports active pollers but its success rate drops.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 1,
+            "mappings": [],
+            "max": 1,
+            "min": 0,
+            "noValue": "NO DATA",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "orange",
+                  "value": 0.5
+                },
+                {
+                  "color": "green",
+                  "value": 0.95
+                }
+              ]
+            },
+            "unit": "percentunit"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 8,
+          "x": 16,
+          "y": 1
+        },
+        "id": 63,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name"
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${prometheusds}"
+            },
+            "expr": "1 - ((sum by (juju_unit) (rate(temporal_long_request_failure{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\",juju_unit=~\"$juju_unit\",operation=~\"Poll.*TaskQueue\"}[5m])) or sum by (juju_unit) (rate(temporal_long_request{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\",juju_unit=~\"$juju_unit\",operation=~\"Poll.*TaskQueue\"}[5m])) * 0) / sum by (juju_unit) (rate(temporal_long_request{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\",juju_unit=~\"$juju_unit\",operation=~\"Poll.*TaskQueue\"}[5m])))",
+            "legendFormat": "{{juju_unit}}",
+            "refId": "A"
+          }
+        ],
+        "title": "Poll Success Rate",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prometheusds}"
+        },
+        "description": "History of the worker's scrape status per unit.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "fillOpacity": 80,
+              "lineWidth": 0
+            },
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "0": {
+                    "color": "red",
+                    "index": 1,
+                    "text": "DOWN"
+                  },
+                  "1": {
+                    "color": "green",
+                    "index": 0,
+                    "text": "UP"
+                  }
+                }
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 24,
+          "x": 0,
+          "y": 6
+        },
+        "id": 64,
+        "options": {
+          "alignValue": "center",
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": false
+          },
+          "mergeValues": true,
+          "rowHeight": 0.9,
+          "showValue": "auto",
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${prometheusds}"
+            },
+            "expr": "max by (juju_unit) (up{juju_charm=\"temporal-worker-k8s\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\",juju_unit=~\"$juju_unit\"})",
+            "legendFormat": "{{juju_unit}}",
+            "refId": "A"
+          }
+        ],
+        "title": "Worker Up History",
+        "type": "state-timeline"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prometheusds}"
+        },
+        "description": "Number of pollers per unit and poller type (workflow_task, sticky_workflow_task, activity_task, nexus_task).",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineWidth": 1,
+              "showPoints": "never"
+            },
+            "decimals": 0,
+            "min": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 11
+        },
+        "id": 65,
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${prometheusds}"
+            },
+            "expr": "sum by (juju_unit, poller_type) (temporal_num_pollers{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\",juju_unit=~\"$juju_unit\"})",
+            "legendFormat": "{{juju_unit}} {{poller_type}}",
+            "refId": "A"
+          }
+        ],
+        "title": "Pollers By Type",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${prometheusds}"
+        },
+        "description": "Rate of task queue poll requests and of failed poll requests, broken down by operation and gRPC status code.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineWidth": 1,
+              "showPoints": "never"
+            },
+            "min": 0,
+            "unit": "reqps"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "B"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "red",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 11
+        },
+        "id": 66,
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${prometheusds}"
+            },
+            "expr": "sum by (operation) (rate(temporal_long_request{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\",juju_unit=~\"$juju_unit\",operation=~\"Poll.*TaskQueue\"}[5m]))",
+            "legendFormat": "{{operation}}",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${prometheusds}"
+            },
+            "expr": "sum by (operation, status_code) (rate(temporal_long_request_failure{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\",juju_unit=~\"$juju_unit\",operation=~\"Poll.*TaskQueue\"}[5m]))",
+            "legendFormat": "{{operation}} failed ({{status_code}})",
+            "refId": "B"
+          }
+        ],
+        "title": "Poll Requests Vs Failures",
+        "type": "timeseries"
+      },
+      {
+        "collapsed": false,
+        "datasource": null,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 19
+        },
+        "id": 67,
+        "panels": [],
+        "title": "Worker Logs",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "${lokids}"
+        },
+        "description": "Logs from the temporal-worker service, forwarded to Loki via the logging relation. Use the 'Log filter' variable to search (regex, case-insensitive).",
+        "gridPos": {
+          "h": 12,
+          "w": 24,
+          "x": 0,
+          "y": 20
+        },
+        "id": 68,
+        "options": {
+          "dedupStrategy": "none",
+          "enableLogDetails": true,
+          "prettifyLogMessage": false,
+          "showCommonLabels": false,
+          "showLabels": false,
+          "showTime": true,
+          "sortOrder": "Descending",
+          "wrapLogMessage": true
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "${lokids}"
+            },
+            "expr": "{juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_application=~\"$juju_application\",juju_unit=~\"$juju_unit\",pebble_service=\"temporal-worker\"} |~ \"(?i)$LogFilter\"",
+            "refId": "A"
+          }
+        ],
+        "title": "Worker Logs",
+        "type": "logs"
+      },
+      {
+        "collapsed": false,
+        "datasource": null,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 32
+        },
         "id": 8,
         "panels": [],
         "title": "RPC Overview ($Namespace)",
@@ -49,7 +547,7 @@
           "h": 10,
           "w": 8,
           "x": 0,
-          "y": 1
+          "y": 33
         },
         "hiddenSeries": false,
         "id": 2,
@@ -145,7 +643,7 @@
           "h": 10,
           "w": 7,
           "x": 8,
-          "y": 1
+          "y": 33
         },
         "hiddenSeries": false,
         "id": 5,
@@ -235,7 +733,7 @@
           "h": 10,
           "w": 9,
           "x": 15,
-          "y": 1
+          "y": 33
         },
         "hiddenSeries": false,
         "id": 4,
@@ -325,7 +823,7 @@
           "h": 9,
           "w": 24,
           "x": 0,
-          "y": 11
+          "y": 43
         },
         "hiddenSeries": false,
         "id": 6,
@@ -410,7 +908,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 20
+          "y": 52
         },
         "id": 12,
         "panels": [
@@ -809,7 +1307,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 21
+          "y": 53
         },
         "id": 20,
         "panels": [
@@ -1406,7 +1904,7 @@
             "timeFrom": null,
             "timeRegions": [],
             "timeShift": null,
-            "title": "Workflow Task Failed By Namespace",
+            "title": "Workflow Task Failed By Workflow Type",
             "tooltip": {
               "shared": true,
               "sort": 0,
@@ -1817,7 +2315,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 22
+          "y": 54
         },
         "id": 42,
         "panels": [
@@ -2285,7 +2783,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 23
+          "y": 55
         },
         "id": 34,
         "panels": [
@@ -2570,7 +3068,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 24
+          "y": 56
         },
         "id": 57,
         "panels": [
@@ -2707,7 +3205,7 @@
             "steppedLine": false,
             "targets": [
               {
-                "expr": "sum by (namespace) (rate(temporal_sticky_cache_miss{namespace=~\"Namespace\"}[5m]))",
+                "expr": "sum by (namespace) (rate(temporal_sticky_cache_miss{namespace=~\"$Namespace\"}[5m]))",
                 "interval": "",
                 "legendFormat": "{{ namespace  }}",
                 "refId": "A"
@@ -2797,7 +3295,7 @@
             "steppedLine": false,
             "targets": [
               {
-                "expr": "sum by (namespace) (rate(temporal_sticky_cache_total_forced_eviction{namespace=~\"Namespace\"}[5m]))",
+                "expr": "sum by (namespace) (rate(temporal_sticky_cache_total_forced_eviction{namespace=~\"$Namespace\"}[5m]))",
                 "interval": "",
                 "legendFormat": "{{ namespace  }}",
                 "refId": "A"
@@ -2987,6 +3485,26 @@
           ],
           "skipUrlSync": false,
           "type": "custom"
+        },
+        {
+          "current": {
+            "selected": false,
+            "text": "",
+            "value": ""
+          },
+          "hide": 0,
+          "label": "Log filter",
+          "name": "LogFilter",
+          "options": [
+            {
+              "selected": true,
+              "text": "",
+              "value": ""
+            }
+          ],
+          "query": "",
+          "skipUrlSync": false,
+          "type": "textbox"
         }
       ]
     },
