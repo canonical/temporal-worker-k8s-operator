@@ -694,7 +694,9 @@ def test_pebble_check_failed(context, state, temporal_worker_container):
     with unittest.mock.patch("scenario._consistency_checker.check_consistency"):
         state_out = context.run(context.on.pebble_check_failed(container, check_info), state_out)
 
-    assert state_out.unit_status == ops.BlockedStatus("temporal-worker service is not running; check logs for crash details")
+    assert state_out.unit_status == ops.BlockedStatus(
+        "temporal-worker service is not running; check logs for crash details"
+    )
 
 
 def test_pebble_check_recovered(context, state, temporal_worker_container, namespace, queue):
@@ -706,7 +708,9 @@ def test_pebble_check_recovered(context, state, temporal_worker_container, names
     # ops-scenario 7.21.1 bug: consistency checker does not normalise container names
     with unittest.mock.patch("scenario._consistency_checker.check_consistency"):
         state_out = context.run(context.on.pebble_check_failed(container, check_info), state_out)
-    assert state_out.unit_status == ops.BlockedStatus("temporal-worker service is not running; check logs for crash details")
+    assert state_out.unit_status == ops.BlockedStatus(
+        "temporal-worker service is not running; check logs for crash details"
+    )
 
     with unittest.mock.patch("scenario._consistency_checker.check_consistency"):
         state_out = context.run(context.on.pebble_check_recovered(container, check_info), state_out)
@@ -723,9 +727,7 @@ def test_eviction_loop_check_detected(context, state, temporal_worker_container)
     with unittest.mock.patch("scenario._consistency_checker.check_consistency"):
         state_out = context.run(context.on.pebble_check_failed(container, check_info), state_out)
 
-    assert state_out.unit_status == ops.BlockedStatus(
-        "eviction loop detected - fix workflow code before restarting"
-    )
+    assert state_out.unit_status == ops.BlockedStatus("eviction loop detected - fix workflow code before restarting")
 
 
 def test_db_relation(context, state, temporal_worker_container):
@@ -757,3 +759,31 @@ def test_db_relation(context, state, temporal_worker_container):
             },
         }
     )
+
+
+@pytest.mark.parametrize("event_name", ["pebble_ready", "config_changed"])
+def test_metrics_endpoint_address_refreshed(context, state, temporal_worker_container, event_name):
+    """The unit publishes its current IP for Prometheus to scrape after a pod restart or config change."""
+    metrics_relation = ops.testing.Relation(
+        "metrics-endpoint",
+        remote_app_name="prometheus",
+        local_unit_data={"prometheus_scrape_unit_address": "10.1.0.1"},
+    )
+    network = ops.testing.Network(
+        "metrics-endpoint",
+        bind_addresses=[ops.testing.BindAddress([ops.testing.Address("10.1.0.2")])],
+    )
+    state = dataclasses.replace(
+        state,
+        relations=[*state.relations, metrics_relation],
+        networks={network},
+    )
+
+    if event_name == "pebble_ready":
+        event = context.on.pebble_ready(temporal_worker_container)
+    else:
+        event = context.on.config_changed()
+    state_out = context.run(event, state)
+
+    unit_data = state_out.get_relation(metrics_relation.id).local_unit_data
+    assert unit_data["prometheus_scrape_unit_address"] == "10.1.0.2"
