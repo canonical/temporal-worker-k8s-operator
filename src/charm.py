@@ -360,6 +360,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         Args:
             event: The peer relation changed event.
         """
+        # The leader writes the peer data itself and already runs `_update` when the database
+        # relation changes, so only non-leader units need to react to its changes.
         if self.unit.is_leader():
             return
         self._update(event)
@@ -394,6 +396,10 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 auth_config = self.get_auth_config_from_juju_secret()
         except ValueError as err:
             self.unit.status = BlockedStatus(str(err))
+            return
+
+        if self.model.get_relation("database") and not self._state.database_connection:
+            self.unit.status = WaitingStatus("waiting for database credentials")
             return
 
         logger.info("Configuring Temporal worker")
