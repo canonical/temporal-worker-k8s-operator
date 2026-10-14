@@ -83,7 +83,11 @@ options:
     type: string
 
   tls-root-cas:
-    description: Root certificate authority (CA) certificates for TLS communication.
+    description: |
+      Root certificate authority (CA) certificates for TLS communication, in PEM format.
+      When set, the worker dials the Temporal server over TLS and verifies it against these CAs.
+      When the server reports over the `temporal-host-info` relation that its frontend serves TLS,
+      this must be set to the CA that issued the frontend certificate, or the charm blocks.
     default: ""
     type: string
 
