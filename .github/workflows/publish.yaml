@@ -41,23 +41,3 @@ jobs:
           channel: 2.0/edge
           tag-prefix: temporal-worker-k8s
           charmcraft-channel: 4.x/stable
-
-  publish-libs:
-    name: Publish charm libs
-    runs-on: ubuntu-24.04
-    needs:
-      - tests
-      - publish
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Publish changed charm libraries
-        uses: canonical/charming-actions/release-libraries@2.7.0
-        with:
-          credentials: ${{ secrets.CHARMHUB_TOKEN }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          charmcraft-channel: 4.x/stable
