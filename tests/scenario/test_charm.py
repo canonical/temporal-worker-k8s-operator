@@ -852,11 +852,13 @@ def test_host_info_tls_frontend_with_ca(context, state, temporal_worker_containe
 
 def test_host_info_tls_frontend_with_ca_from_environment(context, state, temporal_worker_container):
     """The CA can also come from the `environment` config, which overrides tls-root-cas."""
+    # Escape the newlines so the bundle fits in a double-quoted YAML string.
+    escaped_ca_bundle = CA_BUNDLE.replace("\n", "\\n")
     environment = textwrap.dedent(
         f"""
         env:
           - name: TEMPORAL_TLS_ROOT_CAS
-            value: "{CA_BUNDLE.replace(chr(10), "\\n")}"
+            value: "{escaped_ca_bundle}"
         """
     )
     state = _host_info_state(state, tls=True, config={"environment": environment})
