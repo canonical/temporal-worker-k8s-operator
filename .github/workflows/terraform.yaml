@@ -1,5 +1,7 @@
 name: Terraform checks
 
+# Not keyed on github.workflow: when called from publish.yaml that would resolve
+# to the caller's name and collide with its concurrency group.
 concurrency:
   group: terraform-${{ github.ref }}
   cancel-in-progress: true
@@ -8,11 +10,9 @@ on:
   pull_request:
   workflow_call:
 
-
-
 jobs:
   pull-request-terraform-checks:
-    name: Terraform checks
+    name: PR Terraform checks
     uses: canonical/workflows-team/.github/workflows/terraform.yaml@main
     with:
       install-docker: true
