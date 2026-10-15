@@ -443,7 +443,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 context.update({key: value})
 
         host = None
-        if self.host_info.host and self.host_info.port:
+        host_from_relation = bool(self.host_info.host and self.host_info.port)
+        if host_from_relation:
             host = f"{self.host_info.host}:{self.host_info.port}"
             if self._deprecated_host:
                 logger.warning(
@@ -493,6 +494,23 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         # Auth config options will be deprecated in favor of using juju user secrets.
         if auth_config:
             context.update(**auth_config)
+
+        # temporal-host-info reports whether the frontend serves gRPC over TLS,
+        # but the workload only dials TLS when it has a CA bundle, so without
+        # one it would dial plaintext and fail with no hint at the cause. The
+        # CA stays operator-supplied (`tls-root-cas` or `environment`) until
+        # the workload gets a TLS switch of its own; see
+        # canonical/temporal-worker-k8s-operator#121.
+        if host_from_relation:
+            tls_root_cas = context.get("TEMPORAL_TLS_ROOT_CAS") or context.get("TWC_TLS_ROOT_CAS")
+            if self.host_info.tls and not tls_root_cas:
+                self.unit.status = BlockedStatus("Temporal frontend uses TLS: set tls-root-cas to its CA")
+                return
+            if not self.host_info.tls and tls_root_cas:
+                logger.warning(
+                    "tls-root-cas is set but the Temporal frontend does not serve TLS: the worker dials "
+                    "it over TLS and will fail to connect. Unset tls-root-cas, or enable frontend TLS."
+                )
 
         context.update({"TWC_PROMETHEUS_PORT": PROMETHEUS_PORT, "TEMPORAL_PROMETHEUS_PORT": PROMETHEUS_PORT})
 

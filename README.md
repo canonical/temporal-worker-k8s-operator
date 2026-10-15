@@ -22,6 +22,27 @@ The `temporal-host-info` relation is the preferred source of the Temporal server
 
 `host` is deprecated and will be removed in a future release. Prefer integrating the `temporal-host-info` relation instead of relying on config fallback.
 
+### Frontend TLS
+
+When the Temporal server's frontend serves gRPC over TLS (its `frontend-certificates`
+relation is integrated), the server tells the worker over `temporal-host-info`. The worker
+dials TLS only when it has a CA to verify the server with, so set `tls-root-cas` to the CA
+that issued the frontend certificate:
+
+```bash
+juju run self-signed-certificates/0 get-ca-certificate --format json \
+  | jq -r '.[].results."ca-certificate"' > ca-bundle.pem
+juju config temporal-worker-k8s tls-root-cas="$(cat ca-bundle.pem)"
+```
+
+Until it is set, the charm is blocked. The worker verifies the server against the address
+published over `temporal-host-info`, the frontend's in-cluster service name, which the
+frontend certificate includes by default. If the server sets `frontend-cert-sans-dns`, those
+names replace the defaults, and the worker can't verify the in-cluster address.
+
+Without frontend TLS, leave `tls-root-cas` unset: a worker with a CA dials TLS and fails
+against a plaintext frontend.
+
 ## Usage
 
 ### Deploying

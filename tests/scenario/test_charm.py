@@ -868,6 +868,105 @@ def test_metrics_endpoint_address_refreshed(context, state, temporal_worker_cont
     assert unit_data["prometheus_scrape_unit_address"] == "10.1.0.2"
 
 
+FRONTEND_HOST = "temporal-k8s.test-model.svc.cluster.local"
+CA_BUNDLE = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----"
+
+
+def _host_info_state(state, tls, config=None):
+    """Return the state with a temporal-host-info relation publishing the frontend.
+
+    Args:
+        state: The base state.
+        tls: Whether the provider reports that the frontend serves TLS.
+        config: Charm config overrides.
+
+    Returns:
+        The state with the relation added.
+    """
+    host_info = ops.testing.Relation(
+        "temporal-host-info",
+        remote_app_data={"host": FRONTEND_HOST, "port": "7233", "tls": str(tls).lower()},
+    )
+    return dataclasses.replace(
+        state,
+        relations=[*state.relations, host_info],
+        config={**state.config, **(config or {})},
+    )
+
+
+def test_host_info_plaintext_frontend(context, state, temporal_worker_container):
+    """Without frontend TLS the worker uses the published address and needs no CA."""
+    state = _host_info_state(state, tls=False)
+
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+
+    assert isinstance(state_out.unit_status, ops.ActiveStatus)
+    env = _get_plan_environment(state_out)
+    assert env["TEMPORAL_HOST"] == f"{FRONTEND_HOST}:7233"
+    assert env["TEMPORAL_TLS_ROOT_CAS"] == ""
+
+
+def test_host_info_tls_frontend_without_ca_blocks(context, state, temporal_worker_container):
+    """A TLS frontend without a CA would make the workload dial plaintext, so block."""
+    state = _host_info_state(state, tls=True)
+
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+
+    assert state_out.unit_status == ops.BlockedStatus("Temporal frontend uses TLS: set tls-root-cas to its CA")
+    assert not state_out.get_container("temporal-worker").plan.services
+
+
+def test_host_info_tls_frontend_with_ca(context, state, temporal_worker_container):
+    """With tls-root-cas set the workload gets the CA, which makes it dial TLS."""
+    state = _host_info_state(state, tls=True, config={"tls-root-cas": CA_BUNDLE})
+
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+
+    assert isinstance(state_out.unit_status, ops.ActiveStatus)
+    env = _get_plan_environment(state_out)
+    assert env["TEMPORAL_HOST"] == f"{FRONTEND_HOST}:7233"
+    assert env["TEMPORAL_TLS_ROOT_CAS"] == CA_BUNDLE
+    assert env["TWC_TLS_ROOT_CAS"] == CA_BUNDLE
+
+
+def test_host_info_tls_frontend_with_ca_from_environment(context, state, temporal_worker_container):
+    """The CA can also come from the `environment` config, which overrides tls-root-cas."""
+    # Escape the newlines so the bundle fits in a double-quoted YAML string.
+    escaped_ca_bundle = CA_BUNDLE.replace("\n", "\\n")
+    environment = textwrap.dedent(
+        f"""
+        env:
+          - name: TEMPORAL_TLS_ROOT_CAS
+            value: "{escaped_ca_bundle}"
+        """
+    )
+    state = _host_info_state(state, tls=True, config={"environment": environment})
+
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+
+    assert isinstance(state_out.unit_status, ops.ActiveStatus)
+    assert _get_plan_environment(state_out)["TEMPORAL_TLS_ROOT_CAS"] == CA_BUNDLE
+
+
+def test_host_info_plaintext_frontend_with_ca_warns(context, state, temporal_worker_container, caplog):
+    """A CA against a plaintext frontend makes the workload dial TLS: warn, but don't block."""
+    state = _host_info_state(state, tls=False, config={"tls-root-cas": CA_BUNDLE})
+
+    with caplog.at_level(logging.WARNING):
+        state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+
+    assert isinstance(state_out.unit_status, ops.ActiveStatus)
+    assert "the Temporal frontend does not serve TLS" in caplog.text
+
+
+def test_deprecated_host_ignores_tls_check(context, state, temporal_worker_container):
+    """Without temporal-host-info there is no TLS signal, so tls-root-cas is left to the operator."""
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+
+    assert isinstance(state_out.unit_status, ops.ActiveStatus)
+    assert _get_plan_environment(state_out)["TEMPORAL_HOST"] == "test-host"
+
+
 @pytest.mark.database_relation_skipped
 @pytest.mark.parametrize("leader", [True, False])
 def test_waiting_for_database_credentials(context, state, temporal_worker_container, leader):
