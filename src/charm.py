@@ -69,6 +69,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self.framework.observe(self.on.temporal_worker_pebble_check_failed, self._on_pebble_check_failed)
         self.framework.observe(self.on.temporal_worker_pebble_check_recovered, self._on_pebble_check_recovered)
         self.framework.observe(self.on.secret_changed, self._on_secret_changed)
+        self.framework.observe(self.on.peer_relation_changed, self._on_peer_relation_changed)
 
         # Vault
         self.vault = vault_kv.VaultKvRequires(
@@ -353,6 +354,18 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if self.model.get_relation("database") and not self.config.get("db-name"):
             raise ValueError("Invalid config: db name value missing")
 
+    def _on_peer_relation_changed(self, event):
+        """Handle peer relation changes so non-leader units pick up leader-written state.
+
+        Args:
+            event: The peer relation changed event.
+        """
+        # The leader writes the peer data itself and already runs `_update` when the database
+        # relation changes, so only non-leader units need to react to its changes.
+        if self.unit.is_leader():
+            return
+        self._update(event)
+
     def _update(self, event):  # noqa: C901
         """Update the Temporal worker configuration and replan its execution.
 
@@ -383,6 +396,10 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 auth_config = self.get_auth_config_from_juju_secret()
         except ValueError as err:
             self.unit.status = BlockedStatus(str(err))
+            return
+
+        if self.model.get_relation("database") and not self._state.database_connection:
+            self.unit.status = WaitingStatus("waiting for database credentials")
             return
 
         logger.info("Configuring Temporal worker")

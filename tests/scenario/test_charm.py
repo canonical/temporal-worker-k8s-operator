@@ -787,3 +787,32 @@ def test_metrics_endpoint_address_refreshed(context, state, temporal_worker_cont
 
     unit_data = state_out.get_relation(metrics_relation.id).local_unit_data
     assert unit_data["prometheus_scrape_unit_address"] == "10.1.0.2"
+
+
+@pytest.mark.database_relation_skipped
+@pytest.mark.parametrize("leader", [True, False])
+def test_waiting_for_database_credentials(context, state, temporal_worker_container, leader):
+    state = dataclasses.replace(state, leader=leader)
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+
+    assert state_out.unit_status == ops.WaitingStatus("waiting for database credentials")
+    assert not state_out.get_container("temporal-worker").plan.services
+
+
+def test_non_leader_applies_db_credentials_on_peer_relation_changed(
+    context, state, temporal_worker_container, peer_relation
+):
+    state = dataclasses.replace(state, leader=False)
+    state_out = context.run(context.on.relation_changed(peer_relation), state)
+
+    environment = state_out.get_container("temporal-worker").plan.to_dict()["services"]["temporal-worker"][
+        "environment"
+    ]
+    assert {k: environment[k] for k in DATABASE_CONFIG} == DATABASE_CONFIG
+    assert isinstance(state_out.unit_status, ops.ActiveStatus)
+
+
+def test_leader_ignores_peer_relation_changed(context, state, peer_relation):
+    state_out = context.run(context.on.relation_changed(peer_relation), state)
+
+    assert not state_out.get_container("temporal-worker").plan.services
