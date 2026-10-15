@@ -965,8 +965,8 @@ def test_deprecated_host_ignores_tls_check(context, state, temporal_worker_conta
 
     assert isinstance(state_out.unit_status, ops.ActiveStatus)
     assert _get_plan_environment(state_out)["TEMPORAL_HOST"] == "test-host"
-    
-    
+
+
 @pytest.mark.database_relation_skipped
 @pytest.mark.parametrize("leader", [True, False])
 def test_waiting_for_database_credentials(context, state, temporal_worker_container, leader):
