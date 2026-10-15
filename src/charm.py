@@ -69,6 +69,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         self.framework.observe(self.on.temporal_worker_pebble_check_failed, self._on_pebble_check_failed)
         self.framework.observe(self.on.temporal_worker_pebble_check_recovered, self._on_pebble_check_recovered)
         self.framework.observe(self.on.secret_changed, self._on_secret_changed)
+        self.framework.observe(self.on.peer_relation_changed, self._on_peer_relation_changed)
 
         # Vault
         self.vault = vault_kv.VaultKvRequires(
@@ -148,6 +149,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         self.unit.status = MaintenanceStatus("restarting worker")
         container.restart(self._service_name)
+        self._set_active_status()
 
         event.set_results({"result": "worker successfully restarted"})
 
@@ -198,6 +200,17 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             self._update(event)
             return
 
+        if isinstance(self.unit.status, ActiveStatus) or self._has_failing_pebble_checks(container):
+            # Either there is nothing to recover from, or a failing pebble check (crash or eviction loop) keeps the
+            # unit Blocked until `_on_pebble_check_recovered` runs.
+            return
+
+        # Configuration, secrets and the pebble plan are valid and no check is failing, so any other status is stale
+        # (e.g. left behind by a transient failure to read a Juju secret). Nothing else would clear it until
+        # the next config-changed, so reconcile now.
+        logger.info(f"unit status {self.unit.status!r} is stale, reconciling")
+        self._update(event)
+
     @log_event_handler(logger)
     def _on_pebble_check_failed(self, event):
         """Handle pebble check failed event.
@@ -222,9 +235,24 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         Args:
             event: The event triggered when the pebble check recovers.
         """
+        self._set_active_status()
+
+    def _set_active_status(self):
+        """Set Active status with the configured namespace and queue."""
         self.unit.status = ActiveStatus(
             f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
         )
+
+    def _has_failing_pebble_checks(self, container):
+        """Check whether any pebble check of the container is currently failing.
+
+        Args:
+            container: application container
+
+        Returns:
+            bool, True if at least one pebble check is down
+        """
+        return any(info.status == pebble.CheckStatus.DOWN for info in container.get_checks().values())
 
     def _validate_pebble_plan(self, container):
         """Validate Temporal worker pebble plan.
@@ -353,6 +381,18 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if self.model.get_relation("database") and not self.config.get("db-name"):
             raise ValueError("Invalid config: db name value missing")
 
+    def _on_peer_relation_changed(self, event):
+        """Handle peer relation changes so non-leader units pick up leader-written state.
+
+        Args:
+            event: The peer relation changed event.
+        """
+        # The leader writes the peer data itself and already runs `_update` when the database
+        # relation changes, so only non-leader units need to react to its changes.
+        if self.unit.is_leader():
+            return
+        self._update(event)
+
     def _update(self, event):  # noqa: C901
         """Update the Temporal worker configuration and replan its execution.
 
@@ -383,6 +423,10 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 auth_config = self.get_auth_config_from_juju_secret()
         except ValueError as err:
             self.unit.status = BlockedStatus(str(err))
+            return
+
+        if self.model.get_relation("database") and not self._state.database_connection:
+            self.unit.status = WaitingStatus("waiting for database credentials")
             return
 
         logger.info("Configuring Temporal worker")
@@ -521,9 +565,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             )
             return
 
-        self.unit.status = ActiveStatus(
-            f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
-        )
+        self._set_active_status()
 
 
 def convert_env_var(config_var, prefix="TWC_"):

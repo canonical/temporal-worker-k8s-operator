@@ -730,6 +730,85 @@ def test_eviction_loop_check_detected(context, state, temporal_worker_container)
     assert state_out.unit_status == ops.BlockedStatus("eviction loop detected - fix workflow code before restarting")
 
 
+def test_update_status_recovers_after_transient_secret_error(
+    context, state, temporal_worker_container, config, encryption_key_secret, vault_nonce_secret, namespace, queue
+):
+    """A transient failure to read a Juju secret in update-status must not leave the unit Blocked."""
+    state = dataclasses.replace(state, secrets=[encryption_key_secret, vault_nonce_secret])
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+
+    environment_config = _build_environment_config(secret_id=encryption_key_secret.id)
+    state_out = dataclasses.replace(state_out, config={**config, "environment": environment_config})
+    active_status = ops.ActiveStatus(f"worker listening to namespace {namespace!r} on queue {queue!r}")
+
+    with unittest.mock.patch(
+        "ops.jujuversion.JujuVersion.from_environ", return_value=ops.jujuversion.JujuVersion(version="3.6")
+    ):
+        state_out = context.run(context.on.config_changed(), state_out)
+        assert state_out.unit_status == active_status
+
+        with unittest.mock.patch("ops.model.Secret.get_content", side_effect=ops.ModelError("transient error")):
+            state_out = context.run(context.on.update_status(), state_out)
+        assert state_out.unit_status == ops.BlockedStatus(
+            f"Access permission not granted to charm for secret `{encryption_key_secret.id}`"
+        )
+
+        # The secret is readable again: nothing else would clear the Blocked status.
+        state_out = context.run(context.on.update_status(), state_out)
+
+    assert state_out.unit_status == active_status
+
+
+def test_restart_action_restores_active_immediately(context, state, temporal_worker_container, namespace, queue):
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+    state_out = context.run(context.on.config_changed(), state_out)
+
+    state_out = context.run(context.on.action("restart"), state_out)
+
+    assert state_out.unit_status == ops.ActiveStatus(f"worker listening to namespace {namespace!r} on queue {queue!r}")
+
+
+def test_update_status_restores_active_after_restart_action(
+    context, state, temporal_worker_container, namespace, queue
+):
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+    state_out = dataclasses.replace(state_out, unit_status=ops.MaintenanceStatus("restarting worker"))
+
+    state_out = context.run(context.on.update_status(), state_out)
+
+    assert state_out.unit_status == ops.ActiveStatus(f"worker listening to namespace {namespace!r} on queue {queue!r}")
+
+
+@pytest.mark.parametrize(
+    "blocked_message",
+    [
+        "temporal-worker service is not running; check logs for crash details",
+        "eviction loop detected - fix workflow code before restarting",
+    ],
+)
+def test_update_status_keeps_blocked_while_pebble_check_failing(
+    context, state, temporal_worker_container, blocked_message
+):
+    """A failing pebble check must not be masked by update-status; pebble-check-recovered clears it."""
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+    state_out = context.run(context.on.config_changed(), state_out)
+
+    check_info = ops.testing.CheckInfo(
+        name="start-worker-check",
+        level=ops.pebble.CheckLevel.UNSET,
+        startup=ops.pebble.CheckStartup.UNSET,
+        status=ops.pebble.CheckStatus.DOWN,
+        failures=3,
+        threshold=3,
+    )
+    container = dataclasses.replace(state_out.get_container("temporal-worker"), check_infos=frozenset([check_info]))
+    state_out = dataclasses.replace(state_out, containers={container}, unit_status=ops.BlockedStatus(blocked_message))
+
+    state_out = context.run(context.on.update_status(), state_out)
+
+    assert state_out.unit_status == ops.BlockedStatus(blocked_message)
+
+
 def test_db_relation(context, state, temporal_worker_container):
     state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
     state_out = context.run(context.on.config_changed(), state_out)
@@ -886,3 +965,32 @@ def test_deprecated_host_ignores_tls_check(context, state, temporal_worker_conta
 
     assert isinstance(state_out.unit_status, ops.ActiveStatus)
     assert _get_plan_environment(state_out)["TEMPORAL_HOST"] == "test-host"
+    
+    
+@pytest.mark.database_relation_skipped
+@pytest.mark.parametrize("leader", [True, False])
+def test_waiting_for_database_credentials(context, state, temporal_worker_container, leader):
+    state = dataclasses.replace(state, leader=leader)
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+
+    assert state_out.unit_status == ops.WaitingStatus("waiting for database credentials")
+    assert not state_out.get_container("temporal-worker").plan.services
+
+
+def test_non_leader_applies_db_credentials_on_peer_relation_changed(
+    context, state, temporal_worker_container, peer_relation
+):
+    state = dataclasses.replace(state, leader=False)
+    state_out = context.run(context.on.relation_changed(peer_relation), state)
+
+    environment = state_out.get_container("temporal-worker").plan.to_dict()["services"]["temporal-worker"][
+        "environment"
+    ]
+    assert {k: environment[k] for k in DATABASE_CONFIG} == DATABASE_CONFIG
+    assert isinstance(state_out.unit_status, ops.ActiveStatus)
+
+
+def test_leader_ignores_peer_relation_changed(context, state, peer_relation):
+    state_out = context.run(context.on.relation_changed(peer_relation), state)
+
+    assert not state_out.get_container("temporal-worker").plan.services
