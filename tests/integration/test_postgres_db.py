@@ -9,7 +9,7 @@ import logging
 import jubilant
 import pytest
 from conftest import deploy  # noqa: F401, pylint: disable=W0611
-from helpers import APP_NAME, fast_forward, run_sample_workflow, scale
+from helpers import APP_NAME, fast_forward, run_sample_workflow, scale, wait_active
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +28,6 @@ class TestDeployment:
             logger.info("relating temporal-worker-k8s to postgresql-k8s charms")
             juju.integrate(APP_NAME, "postgresql-k8s")
 
-            juju.wait(
-                lambda status: jubilant.all_active(status, APP_NAME, "postgresql-k8s"),
-                timeout=600,
-            )
+            wait_active(juju, APP_NAME, "postgresql-k8s", timeout=600)
 
             run_sample_workflow(juju, workflow_type="database")

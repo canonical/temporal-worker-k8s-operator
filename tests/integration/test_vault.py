@@ -19,6 +19,8 @@ from helpers import (
     run_sample_workflow,
     scale,
     unseal_vault,
+    wait_active,
+    wait_blocked,
     wait_for_status_message,
 )
 
@@ -40,10 +42,7 @@ class TestDeployment:
         try:
             juju.deploy("vault-k8s", channel="1.16/stable")
 
-            juju.wait(
-                lambda status: jubilant.all_blocked(status, "vault-k8s"),
-                timeout=1200,
-            )
+            wait_blocked(juju, "vault-k8s", timeout=1200)
 
             # Container is up and charm is blocked
             juju.model_config({"update-status-hook-interval": "1m"})
@@ -66,28 +65,19 @@ class TestDeployment:
 
             logger.info("authorizing vault-k8s charm")
             authorize_charm(juju, root_token)
-            juju.wait(
-                lambda status: jubilant.all_active(status, "vault-k8s"),
-                timeout=600,
-            )
+            wait_active(juju, "vault-k8s", timeout=600)
 
             logger.info("relating temporal-worker-k8s to vault-k8s charms")
             juju.integrate(APP_NAME, "vault-k8s")
 
-            juju.wait(
-                lambda status: jubilant.all_active(status, APP_NAME, "vault-k8s"),
-                timeout=600,
-            )
+            wait_active(juju, APP_NAME, "vault-k8s", timeout=600)
 
             logger.info("adding sample secrets to vault")
             add_vault_secret(juju, path="vault-secrets", key="vault-secret1", value="hello")
             add_vault_secret(juju, path="vault-secrets", key="vault-secret2", value="world")
             juju.config(APP_NAME, {"environment": ENVIRONMENT_WITH_VAULT_CONFIG})
 
-            juju.wait(
-                lambda status: jubilant.all_active(status, APP_NAME, "vault-k8s"),
-                timeout=100,
-            )
+            wait_active(juju, APP_NAME, "vault-k8s", timeout=100)
 
             run_sample_workflow(juju, workflow_type="vault")
         finally:

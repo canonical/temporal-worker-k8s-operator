@@ -21,6 +21,7 @@ from helpers import (
     fast_forward,
     get_unit_url,
     run_sample_workflow,
+    wait_active,
 )
 
 logger = logging.getLogger(__name__)
@@ -139,11 +140,7 @@ def observed_stack_fixture(juju: jubilant.Juju, deploy):  # noqa: F811 pylint: d
     # COS charms patch their own pod resources on startup, which restarts the pod and can
     # fail a hook transiently; Juju retries it, so only require that they end up active.
     with fast_forward(juju):
-        juju.wait(
-            lambda status: jubilant.all_active(status, APP_NAME, *COS_APPS),
-            timeout=1200,
-            successes=30,
-        )
+        wait_active(juju, APP_NAME, *COS_APPS, timeout=1200, successes=30)
 
 
 @pytest.mark.abort_on_fail
@@ -268,7 +265,4 @@ class TestObservability:
             assert states["TemporalWorkerDown"] != "firing", "worker process should still be up"
         finally:
             juju.cli("scale-application", APP_NAME_SERVER, "1")
-            juju.wait(
-                lambda status: jubilant.all_active(status, APP_NAME_SERVER, APP_NAME),
-                timeout=900,
-            )
+            wait_active(juju, APP_NAME_SERVER, APP_NAME, timeout=900)

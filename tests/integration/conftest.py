@@ -15,6 +15,7 @@ from helpers import (
     fast_forward,
     get_worker_config,
     setup_temporal_ecosystem,
+    wait_active,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,6 @@ def deploy(juju: jubilant.Juju, charm: pathlib.Path, temporal_worker_image: str)
     juju.config(APP_NAME, {"host": f"{APP_NAME_SERVER}:7233"})
 
     with fast_forward(juju):
-        juju.wait(lambda status: jubilant.all_active(status, APP_NAME), timeout=600)
+        wait_active(juju, APP_NAME, timeout=600)
 
-    assert juju.status().apps[APP_NAME].units[f"{APP_NAME}/0"].workload_status.current == "active"
+    assert juju.status().apps[APP_NAME].units[f"{APP_NAME}/0"].is_active

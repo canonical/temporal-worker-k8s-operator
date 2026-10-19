@@ -13,6 +13,7 @@ from helpers import (
     APP_NAME,
     fast_forward,
     register_temporal_namespace,
+    wait_active,
     wait_for_status_message,
 )
 
@@ -51,10 +52,7 @@ class TestTemporalWorkerInfoRelation:
         }
         juju.config(APP_NAME, cfg)
         with fast_forward(juju):
-            juju.wait(
-                lambda status: jubilant.all_active(status, APP_NAME),
-                timeout=600,
-            )
+            wait_active(juju, APP_NAME, timeout=600)
         wait_for_status_message(juju, APP_NAME, 1, _EXPECTED_WORKER_STATUS, timeout=600, cadence=3)
         juju.deploy(
             worker_info_requirer_charm,
@@ -62,15 +60,13 @@ class TestTemporalWorkerInfoRelation:
             resources={"workload": temporal_worker_image},
         )
         juju.wait(
-            lambda status: jubilant.all_waiting(status, "worker-info-requirer"),
+            lambda status: jubilant.all_waiting(status, "worker-info-requirer")
+            and jubilant.all_agents_idle(status, "worker-info-requirer"),
             timeout=300,
         )
         juju.integrate("worker-info-requirer:temporal-worker-info", f"{APP_NAME}:temporal-worker-info")
-        juju.wait(
-            lambda status: jubilant.all_active(status, "worker-info-requirer"),
-            timeout=300,
-        )
+        wait_active(juju, "worker-info-requirer", timeout=300)
         requirer_unit = juju.status().apps["worker-info-requirer"].units["worker-info-requirer/0"]
         expected_status = "Temporal namespace: test-namespace, queue: test-queue"
-        assert requirer_unit.workload_status.current == "active"
+        assert requirer_unit.is_active
         assert requirer_unit.workload_status.message == expected_status
