@@ -652,7 +652,9 @@ def test_pebble_check_failed(context, state, temporal_worker_container):
     with unittest.mock.patch("scenario._consistency_checker.check_consistency"):
         state_out = context.run(context.on.pebble_check_failed(container, check_info), state_out)
 
-    assert state_out.unit_status == ops.BlockedStatus("temporal-worker service is not running; check logs for crash details")
+    assert state_out.unit_status == ops.BlockedStatus(
+        "temporal-worker service is not running; check logs for crash details"
+    )
 
 
 def test_pebble_check_recovered(context, state, temporal_worker_container, namespace, queue):
@@ -664,7 +666,9 @@ def test_pebble_check_recovered(context, state, temporal_worker_container, names
     # ops-scenario 7.21.1 bug: consistency checker does not normalise container names
     with unittest.mock.patch("scenario._consistency_checker.check_consistency"):
         state_out = context.run(context.on.pebble_check_failed(container, check_info), state_out)
-    assert state_out.unit_status == ops.BlockedStatus("temporal-worker service is not running; check logs for crash details")
+    assert state_out.unit_status == ops.BlockedStatus(
+        "temporal-worker service is not running; check logs for crash details"
+    )
 
     with unittest.mock.patch("scenario._consistency_checker.check_consistency"):
         state_out = context.run(context.on.pebble_check_recovered(container, check_info), state_out)
@@ -681,13 +685,11 @@ def test_eviction_loop_check_detected(context, state, temporal_worker_container)
     with unittest.mock.patch("scenario._consistency_checker.check_consistency"):
         state_out = context.run(context.on.pebble_check_failed(container, check_info), state_out)
 
-    assert state_out.unit_status == ops.BlockedStatus(
-        "eviction loop detected - fix workflow code before restarting"
-    )
+    assert state_out.unit_status == ops.BlockedStatus("eviction loop detected - fix workflow code before restarting")
 
 
 def test_update_status_recovers_after_transient_secret_error(
-        context, state, temporal_worker_container, config, encryption_key_secret, vault_nonce_secret, namespace, queue
+    context, state, temporal_worker_container, config, encryption_key_secret, vault_nonce_secret, namespace, queue
 ):
     """A transient failure to read a Juju secret in update-status must not leave the unit Blocked."""
     state = dataclasses.replace(state, secrets=[encryption_key_secret, vault_nonce_secret])
@@ -698,7 +700,7 @@ def test_update_status_recovers_after_transient_secret_error(
     active_status = ops.ActiveStatus(f"worker listening to namespace {namespace!r} on queue {queue!r}")
 
     with unittest.mock.patch(
-            "ops.jujuversion.JujuVersion.from_environ", return_value=ops.jujuversion.JujuVersion(version="3.6")
+        "ops.jujuversion.JujuVersion.from_environ", return_value=ops.jujuversion.JujuVersion(version="3.6")
     ):
         state_out = context.run(context.on.config_changed(), state_out)
         assert state_out.unit_status == active_status
@@ -715,9 +717,7 @@ def test_update_status_recovers_after_transient_secret_error(
     assert state_out.unit_status == active_status
 
 
-def test_restart_action_restores_active_immediately(
-    context, state, temporal_worker_container, namespace, queue
-):
+def test_restart_action_restores_active_immediately(context, state, temporal_worker_container, namespace, queue):
     state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
     state_out = context.run(context.on.config_changed(), state_out)
 
@@ -727,7 +727,7 @@ def test_restart_action_restores_active_immediately(
 
 
 def test_update_status_restores_active_after_restart_action(
-        context, state, temporal_worker_container, namespace, queue
+    context, state, temporal_worker_container, namespace, queue
 ):
     state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
     state_out = dataclasses.replace(state_out, unit_status=ops.MaintenanceStatus("restarting worker"))
@@ -745,7 +745,7 @@ def test_update_status_restores_active_after_restart_action(
     ],
 )
 def test_update_status_keeps_blocked_while_pebble_check_failing(
-        context, state, temporal_worker_container, blocked_message
+    context, state, temporal_worker_container, blocked_message
 ):
     """A failing pebble check must not be masked by update-status; pebble-check-recovered clears it."""
     state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
