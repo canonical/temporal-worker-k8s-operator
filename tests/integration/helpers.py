@@ -79,6 +79,43 @@ def fast_forward(juju: jubilant.Juju, interval: str = "10s") -> Generator[None, 
         juju.model_config({"update-status-hook-interval": old})
 
 
+def wait_active(juju: jubilant.Juju, *apps: str, timeout: float | None = None, successes: int = 3):
+    """Wait until the given apps are active and their agents idle.
+
+    Equivalent of ``wait_for_idle(apps=apps, status="active")``: jubilant's
+    ``all_active`` only inspects workload status, so ``all_agents_idle`` is
+    needed to guarantee pending hooks (config, relation, refresh) were
+    processed before returning.
+
+    Args:
+        juju: Jubilant Juju client bound to the test model.
+        apps: Applications to wait for.
+        timeout: Overall deadline in seconds.
+        successes: Consecutive polls the condition must hold for.
+    """
+    juju.wait(
+        lambda status: jubilant.all_active(status, *apps) and jubilant.all_agents_idle(status, *apps),
+        successes=successes,
+        timeout=timeout,
+    )
+
+
+def wait_blocked(juju: jubilant.Juju, *apps: str, timeout: float | None = None, successes: int = 3):
+    """Wait until the given apps are blocked and their agents idle.
+
+    Args:
+        juju: Jubilant Juju client bound to the test model.
+        apps: Applications to wait for.
+        timeout: Overall deadline in seconds.
+        successes: Consecutive polls the condition must hold for.
+    """
+    juju.wait(
+        lambda status: jubilant.all_blocked(status, *apps) and jubilant.all_agents_idle(status, *apps),
+        successes=successes,
+        timeout=timeout,
+    )
+
+
 def get_worker_config(secret_id):
     """Get worker charm config.
 
@@ -282,9 +319,9 @@ def perform_temporal_integrations(juju: jubilant.Juju):
     juju.integrate(f"{APP_NAME_SERVER}:visibility", "postgresql-k8s:database")
     juju.integrate(f"{APP_NAME_SERVER}:admin", f"{APP_NAME_ADMIN}:admin")
     juju.integrate(f"{APP_NAME_SERVER}:temporal-host-info", f"{APP_NAME_ADMIN}:temporal-host-info")
-    juju.wait(lambda status: jubilant.all_active(status, APP_NAME_SERVER), timeout=180)
+    wait_active(juju, APP_NAME_SERVER, timeout=180)
 
-    assert juju.status().apps[APP_NAME_SERVER].units[f"{APP_NAME_SERVER}/0"].workload_status.current == "active"
+    assert juju.status().apps[APP_NAME_SERVER].units[f"{APP_NAME_SERVER}/0"].is_active
 
 
 def scale(juju: jubilant.Juju, app, units):
@@ -299,7 +336,9 @@ def scale(juju: jubilant.Juju, app, units):
 
     with fast_forward(juju):
         juju.wait(
-            lambda status: jubilant.all_active(status, app) and len(status.apps[app].units) == units,
+            lambda status: jubilant.all_active(status, app)
+            and jubilant.all_agents_idle(status, app)
+            and len(status.apps[app].units) == units,
             timeout=600,
             successes=30,
         )
@@ -324,15 +363,15 @@ def setup_temporal_ecosystem(juju: jubilant.Juju):
     )
 
     with fast_forward(juju):
-        juju.wait(lambda status: jubilant.all_blocked(status, APP_NAME_SERVER, APP_NAME_ADMIN), timeout=600)
-        juju.wait(lambda status: jubilant.all_active(status, "postgresql-k8s"), timeout=600)
+        wait_blocked(juju, APP_NAME_SERVER, APP_NAME_ADMIN, timeout=600)
+        wait_active(juju, "postgresql-k8s", timeout=600)
 
         perform_temporal_integrations(juju)
 
         register_temporal_namespace(juju, "default")
 
-        juju.wait(lambda status: jubilant.all_active(status, APP_NAME_SERVER), timeout=300)
-        assert juju.status().apps[APP_NAME_SERVER].units[f"{APP_NAME_SERVER}/0"].workload_status.current == "active"
+        wait_active(juju, APP_NAME_SERVER, timeout=300)
+        assert juju.status().apps[APP_NAME_SERVER].units[f"{APP_NAME_SERVER}/0"].is_active
 
 
 def read_unit_statuses(juju: jubilant.Juju, application: str):

@@ -18,6 +18,8 @@ from helpers import (
     get_worker_config,
     run_sample_workflow,
     setup_temporal_ecosystem,
+    wait_active,
+    wait_blocked,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,16 +34,10 @@ def deploy(juju: jubilant.Juju):
     juju.deploy(APP_NAME, config=BASE_WORKER_CONFIG, channel="edge")
 
     with fast_forward(juju):
-        juju.wait(
-            lambda status: jubilant.all_blocked(status, APP_NAME),
-            timeout=600,
-        )
+        wait_blocked(juju, APP_NAME, timeout=600)
 
         juju.config(APP_NAME, {"host": f"{APP_NAME_SERVER}:7233"})
-        juju.wait(
-            lambda status: jubilant.all_active(status, APP_NAME),
-            timeout=600,
-        )
+        wait_active(juju, APP_NAME, timeout=600)
 
 
 @pytest.mark.abort_on_fail
@@ -58,14 +54,22 @@ class TestUpgrade:
             base="ubuntu@24.04",
         )
 
+        # Wait for the refresh to actually land: refresh is asynchronous, and
+        # all_active alone can return while the old charm is still running or
+        # the upgrade-charm hook is pending. Locally refreshed charms report
+        # charm-origin "local" (charm-rev -1), replacing "charmhub".
+        juju.wait(
+            lambda status: status.apps[APP_NAME].charm_origin == "local"
+            and jubilant.all_active(status, APP_NAME)
+            and jubilant.all_agents_idle(status, APP_NAME),
+            timeout=600,
+        )
+
         secret_id = add_juju_secret(juju)
         worker_config = get_worker_config(secret_id)
 
         juju.config(APP_NAME, worker_config)
-        juju.wait(
-            lambda status: jubilant.all_active(status, APP_NAME),
-            timeout=600,
-        )
-        assert juju.status().apps[APP_NAME].units[f"{APP_NAME}/0"].workload_status.current == "active"
+        wait_active(juju, APP_NAME, timeout=600)
+        assert juju.status().apps[APP_NAME].units[f"{APP_NAME}/0"].is_active
 
         run_sample_workflow(juju)
