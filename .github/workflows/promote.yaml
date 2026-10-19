@@ -1,0 +1,38 @@
+name: Promote charm
+
+on:
+  workflow_dispatch:
+    inputs:
+      origin-channel:
+        description: Origin channel
+        required: true
+        default: 1.0/edge
+      destination-channel:
+        description: Destination channel
+        required: true
+        default: 1.0/stable
+      base-channel:
+        description: Base channel of the revision to promote
+        required: true
+        default: "24.04"
+
+jobs:
+  promote:
+    name: Promote charm
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Release charm to channel
+        uses: canonical/charming-actions/release-charm@2.7.0
+        with:
+          credentials: ${{ secrets.CHARMHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          origin-channel: ${{ github.event.inputs.origin-channel }}
+          destination-channel: ${{ github.event.inputs.destination-channel }}
+          base-channel: ${{ github.event.inputs.base-channel }}
+          tag-prefix: temporal-worker-k8s
+          charmcraft-channel: 4.x/stable

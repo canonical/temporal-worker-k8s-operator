@@ -222,9 +222,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 "and may not complete workflow tasks. "
                 "Fix the workflow code before restarting the worker."
             )
-            self.unit.status = BlockedStatus(
-                "eviction loop detected - fix workflow code before restarting"
-            )
+            self.unit.status = BlockedStatus("eviction loop detected - fix workflow code before restarting")
         else:
             self.unit.status = BlockedStatus("temporal-worker service is not running; check logs for crash details")
 
