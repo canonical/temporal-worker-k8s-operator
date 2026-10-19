@@ -68,6 +68,9 @@ class TestUpgrade:
         secret_id = add_juju_secret(juju)
         worker_config = get_worker_config(secret_id)
 
+        # Mirror the deploy fixture: the worker reads the secret by id from its
+        # environment config, which requires the secret to be granted to the app.
+        juju.grant_secret("worker-secrets", APP_NAME)
         juju.config(APP_NAME, worker_config)
         wait_active(juju, APP_NAME, timeout=600)
         assert juju.status().apps[APP_NAME].units[f"{APP_NAME}/0"].is_active

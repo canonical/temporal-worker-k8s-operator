@@ -38,15 +38,18 @@ class VaultActions(framework.Object):
             self._validate_vault_relation()
         except Exception as e:
             event.fail(str(e))
+            return
 
         path, key, value = (event.params.get(param) for param in ["path", "key", "value"])
         if not all([path, key, value]):
             event.fail("`path`, `key` and `value` are required parameters")
+            return
 
         try:
             vault_client = self.charm.vault_relation.get_vault_client()
         except Exception:
             event.fail("Unable to initialize vault client. remove relation and retry.")
+            return
 
         try:
             vault_client.write_secret(path=path, key=key, value=value)
@@ -69,10 +72,12 @@ class VaultActions(framework.Object):
             self._validate_vault_relation()
         except Exception as e:
             event.fail(str(e))
+            return
 
         path, key = (event.params.get(param) for param in ["path", "key"])
         if not all([path, key]):
             event.fail("`path` and `key` are required parameters")
+            return
 
         try:
             vault_client = self.charm.vault_relation.get_vault_client()
@@ -96,7 +101,7 @@ class VaultActions(framework.Object):
         Raises:
             Exception: if the Vault relation was not successfully validated.
         """
-        container = self.charm.unit.get_container(self.charm.name)
+        container = self.charm.unit.get_container(self.charm._service_name)
         if not container.can_connect():
             raise Exception("Failed to connect to the container")
 
