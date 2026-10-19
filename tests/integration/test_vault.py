@@ -7,6 +7,7 @@
 import logging
 
 import hvac
+import jubilant
 import pytest
 from conftest import deploy  # noqa: F401, pylint: disable=W0611
 from helpers import (
@@ -20,7 +21,6 @@ from helpers import (
     unseal_vault,
     wait_for_status_message,
 )
-from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
@@ -30,72 +30,65 @@ logger = logging.getLogger(__name__)
 class TestDeployment:
     """Integration tests for Temporal charm."""
 
-    async def test_vault_relation(self, ops_test: OpsTest):
+    def test_vault_relation(self, juju: jubilant.Juju):
         """Test Vault relation."""
-        await scale(ops_test, app=APP_NAME, units=2)
+        scale(juju, app=APP_NAME, units=2)
 
         # vault-k8s rev 502 crashes update-status if it fires while the
         # workload container is still coming up (pebble socket missing).
-        await ops_test.model.set_config({"update-status-hook-interval": "5m"})
+        juju.model_config({"update-status-hook-interval": "5m"})
         try:
-            await ops_test.model.deploy("vault-k8s", channel="1.16/stable")
+            juju.deploy("vault-k8s", channel="1.16/stable")
 
-            await ops_test.model.wait_for_idle(
-                apps=["vault-k8s"],
-                status="blocked",
-                raise_on_blocked=False,
+            juju.wait(
+                lambda status: jubilant.all_blocked(status, "vault-k8s"),
                 timeout=1200,
             )
 
             # Container is up and charm is blocked
-            await ops_test.model.set_config({"update-status-hook-interval": "1m"})
+            juju.model_config({"update-status-hook-interval": "1m"})
 
             # Initialize vault
             logger.info("initializing vault-k8s charm")
-            vault_url = await get_unit_url(ops_test, "vault-k8s", 0, 8200, "https")
+            vault_url = get_unit_url(juju, "vault-k8s", 0, 8200, "https")
             client = hvac.Client(url=vault_url, verify=False)
             initialize_response = client.sys.initialize(secret_shares=1, secret_threshold=1)
             root_token, unseal_key = initialize_response["root_token"], initialize_response["keys"][0]
             unseal_vault(client, vault_url, root_token, unseal_key)
 
             logger.info("waiting for vault-k8s charm to go into blocked state")
-            await wait_for_status_message(
+            wait_for_status_message(
+                juju,
                 application="vault-k8s",
-                ops_test=ops_test,
                 count=1,
                 expected_message="Please authorize charm (see `authorize-charm` action)",
             )
 
             logger.info("authorizing vault-k8s charm")
-            await authorize_charm(ops_test, root_token)
-            await ops_test.model.wait_for_idle(
-                apps=["vault-k8s"],
-                status="active",
+            authorize_charm(juju, root_token)
+            juju.wait(
+                lambda status: jubilant.all_active(status, "vault-k8s"),
                 timeout=600,
             )
 
             logger.info("relating temporal-worker-k8s to vault-k8s charms")
-            await ops_test.model.integrate(APP_NAME, "vault-k8s")
+            juju.integrate(APP_NAME, "vault-k8s")
 
-            await ops_test.model.wait_for_idle(
-                apps=[APP_NAME, "vault-k8s"],
-                status="active",
-                raise_on_blocked=False,
+            juju.wait(
+                lambda status: jubilant.all_active(status, APP_NAME, "vault-k8s"),
                 timeout=600,
             )
 
             logger.info("adding sample secrets to vault")
-            await add_vault_secret(ops_test, path="vault-secrets", key="vault-secret1", value="hello")
-            await add_vault_secret(ops_test, path="vault-secrets", key="vault-secret2", value="world")
-            await ops_test.model.applications[APP_NAME].set_config({"environment": ENVIRONMENT_WITH_VAULT_CONFIG})
+            add_vault_secret(juju, path="vault-secrets", key="vault-secret1", value="hello")
+            add_vault_secret(juju, path="vault-secrets", key="vault-secret2", value="world")
+            juju.config(APP_NAME, {"environment": ENVIRONMENT_WITH_VAULT_CONFIG})
 
-            await ops_test.model.wait_for_idle(
-                apps=[APP_NAME, "vault-k8s"],
-                status="active",
-                raise_on_blocked=False,
+            juju.wait(
+                lambda status: jubilant.all_active(status, APP_NAME, "vault-k8s"),
                 timeout=100,
             )
 
-            await run_sample_workflow(ops_test, workflow_type="vault")
+            run_sample_workflow(juju, workflow_type="vault")
         finally:
-            await ops_test.model.set_config({"update-status-hook-interval": "1m"})
+            juju.model_config({"update-status-hook-interval": "1m"})

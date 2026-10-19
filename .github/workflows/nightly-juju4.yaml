@@ -1,0 +1,52 @@
+# Copyright 2026 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+# Nightly integration tests against Juju 4.x via the team's shared reusable
+# workflow. Each test command gets its own runner provisioned by concierge.
+# Scheduled failures open/update one issue labelled `juju-4`.
+
+name: Juju 4.x Tests
+
+on:
+  schedule:
+    # Run at 03:47 UTC every day
+    - cron: '47 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  integration:
+    name: Integration tests [juju 4.x]
+    uses: canonical/workflows-team/.github/workflows/juju-nightly.yaml@main
+    with:
+      juju-channel: "4.1/edge"
+      # Matches the runner label used by tests.yaml ([self-hosted, linux, X64,
+      # xlarge, noble]).
+      runner: self-hosted-linux-amd64-noble-xlarge
+      timeout-minutes: 120
+      # just integration packs the charm, builds the worker rock with rockcraft
+      # and pushes it to the local OCI registry.
+      install-docker: true
+      extra-snaps: "charmcraft/4.x/stable,rockcraft,astral-uv,just,kubectl"
+      # Starts the local docker registry the rock is pushed to before tests run.
+      setup-command: .github/scripts/setup-artifact-import.sh
+      # 16/stable supports Juju 4; --force bypasses the base check until
+      # postgresql-k8s declares Juju 4 support. Empty revision deploys the
+      # channel's latest revision. The temporal stack dependencies are bumped
+      # to the track/base whose revisions work on Juju 4.x.
+      extra-env: >-
+        {"POSTGRESQL_CHANNEL": "16/stable", "POSTGRESQL_REVISION": "",
+        "POSTGRESQL_FORCE": "true", "TEMPORAL_CHANNEL": "1.31/edge",
+        "TEMPORAL_BASE": "ubuntu@26.04"}
+      test-commands: >-
+        ["just integration tests/integration/test_charm.py",
+        "just integration tests/integration/test_host_info.py",
+        "just integration tests/integration/test_observability.py",
+        "just integration tests/integration/test_postgres_db.py",
+        "just integration tests/integration/test_scaling.py",
+        "just integration tests/integration/test_vault.py",
+        "just integration tests/integration/test_worker_info.py"]
+      issue-label: juju-4
