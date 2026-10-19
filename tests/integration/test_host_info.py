@@ -6,10 +6,17 @@
 
 import logging
 
+import jubilant
 import pytest
 from conftest import deploy  # noqa: F401, pylint: disable=W0611
-from helpers import APP_NAME, APP_NAME_SERVER, run_sample_workflow
-from pytest_operator.plugin import OpsTest
+from helpers import (
+    APP_NAME,
+    APP_NAME_SERVER,
+    fast_forward,
+    run_sample_workflow,
+    wait_active,
+    wait_blocked,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,67 +26,42 @@ logger = logging.getLogger(__name__)
 class TestHostInfo:
     """Integration tests for Temporal charm."""
 
-    async def test_host_info_relation(self, ops_test: OpsTest):
+    def test_host_info_relation(self, juju: jubilant.Juju):
         """Relation values should take precedence over deprecated config fallback."""
-        await ops_test.model.applications[APP_NAME].set_config({"host": "deprecated-host:1"})
-        await ops_test.model.integrate(f"{APP_NAME_SERVER}:temporal-host-info", f"{APP_NAME}:temporal-host-info")
-        async with ops_test.fast_forward():
-            await ops_test.model.wait_for_idle(
-                apps=[APP_NAME],
-                status="active",
-                timeout=1000,
-                raise_on_blocked=False,
-            )
-            await run_sample_workflow(ops_test, use_env_variables=False)
+        juju.config(APP_NAME, {"host": "deprecated-host:1"})
+        juju.integrate(f"{APP_NAME_SERVER}:temporal-host-info", f"{APP_NAME}:temporal-host-info")
+        with fast_forward(juju):
+            # all_active alone can return before the invalid config and new
+            # relation are processed; wait for the agents to settle as well.
+            wait_active(juju, APP_NAME, timeout=1000)
+            run_sample_workflow(juju, use_env_variables=False)
 
-    async def test_host_info_relation_removed_uses_fallback(self, ops_test: OpsTest):
+    def test_host_info_relation_removed_uses_fallback(self, juju: jubilant.Juju):
         """Remove host-info relation and verify deprecated host config fallback still works."""
-        await ops_test.model.applications[APP_NAME].set_config({"host": f"{APP_NAME_SERVER}:7233"})
-        await ops_test.juju(
-            "remove-relation",
+        juju.config(APP_NAME, {"host": f"{APP_NAME_SERVER}:7233"})
+        juju.remove_relation(
             f"{APP_NAME_SERVER}:temporal-host-info",
             f"{APP_NAME}:temporal-host-info",
         )
-        async with ops_test.fast_forward():
-            await ops_test.model.wait_for_idle(
-                apps=[APP_NAME],
-                status="active",
-                timeout=1000,
-                raise_on_blocked=False,
-            )
-            await run_sample_workflow(ops_test, use_env_variables=False)
+        with fast_forward(juju):
+            wait_active(juju, APP_NAME, timeout=1000)
+            run_sample_workflow(juju, use_env_variables=False)
 
-    async def test_host_info_relation_removed_blocks_until_restored(self, ops_test: OpsTest):
+    def test_host_info_relation_removed_blocks_until_restored(self, juju: jubilant.Juju):
         """Ensure worker blocks when relation is removed and no fallback host; recovers when restored."""
-        await ops_test.model.integrate(f"{APP_NAME_SERVER}:temporal-host-info", f"{APP_NAME}:temporal-host-info")
-        await ops_test.model.applications[APP_NAME].set_config({"host": ""})
-        async with ops_test.fast_forward():
-            await ops_test.model.wait_for_idle(
-                apps=[APP_NAME],
-                status="active",
-                timeout=1000,
-                raise_on_blocked=False,
-            )
+        juju.integrate(f"{APP_NAME_SERVER}:temporal-host-info", f"{APP_NAME}:temporal-host-info")
+        juju.config(APP_NAME, {"host": ""})
+        with fast_forward(juju):
+            wait_active(juju, APP_NAME, timeout=1000)
 
-        await ops_test.juju(
-            "remove-relation",
+        juju.remove_relation(
             f"{APP_NAME_SERVER}:temporal-host-info",
             f"{APP_NAME}:temporal-host-info",
         )
-        async with ops_test.fast_forward():
-            await ops_test.model.wait_for_idle(
-                apps=[APP_NAME],
-                status="blocked",
-                timeout=1000,
-                raise_on_blocked=False,
-            )
+        with fast_forward(juju):
+            wait_blocked(juju, APP_NAME, timeout=1000)
 
-        await ops_test.model.integrate(f"{APP_NAME_SERVER}:temporal-host-info", f"{APP_NAME}:temporal-host-info")
-        async with ops_test.fast_forward():
-            await ops_test.model.wait_for_idle(
-                apps=[APP_NAME],
-                status="active",
-                timeout=1000,
-                raise_on_blocked=False,
-            )
-            await run_sample_workflow(ops_test, use_env_variables=False)
+        juju.integrate(f"{APP_NAME_SERVER}:temporal-host-info", f"{APP_NAME}:temporal-host-info")
+        with fast_forward(juju):
+            wait_active(juju, APP_NAME, timeout=1000)
+            run_sample_workflow(juju, use_env_variables=False)

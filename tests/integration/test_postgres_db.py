@@ -6,10 +6,10 @@
 
 import logging
 
+import jubilant
 import pytest
 from conftest import deploy  # noqa: F401, pylint: disable=W0611
-from helpers import APP_NAME, run_sample_workflow, scale
-from pytest_operator.plugin import OpsTest
+from helpers import APP_NAME, fast_forward, run_sample_workflow, scale, wait_active
 
 logger = logging.getLogger(__name__)
 
@@ -19,20 +19,15 @@ logger = logging.getLogger(__name__)
 class TestDeployment:
     """Integration tests for Temporal charm."""
 
-    async def test_postgres_relation(self, ops_test: OpsTest):
+    def test_postgres_relation(self, juju: jubilant.Juju):
         """Test Postgresql relation."""
-        await scale(ops_test, app=APP_NAME, units=2)
-        await ops_test.model.applications[APP_NAME].set_config({"db-name": "temporal-worker-k8s_db"})
+        scale(juju, app=APP_NAME, units=2)
+        juju.config(APP_NAME, {"db-name": "temporal-worker-k8s_db"})
 
-        async with ops_test.fast_forward():
+        with fast_forward(juju):
             logger.info("relating temporal-worker-k8s to postgresql-k8s charms")
-            await ops_test.model.integrate(APP_NAME, "postgresql-k8s")
+            juju.integrate(APP_NAME, "postgresql-k8s")
 
-            await ops_test.model.wait_for_idle(
-                apps=[APP_NAME, "postgresql-k8s"],
-                status="active",
-                raise_on_blocked=False,
-                timeout=600,
-            )
+            wait_active(juju, APP_NAME, "postgresql-k8s", timeout=600)
 
-            await run_sample_workflow(ops_test, workflow_type="database")
+            run_sample_workflow(juju, workflow_type="database")
