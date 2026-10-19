@@ -233,6 +233,9 @@ def register_temporal_namespace(juju: jubilant.Juju, namespace: str):
         {"args": f"operator namespace create --namespace {namespace} --retention 3d"},
     )
     logger.info("cli namespace %s: %s", namespace, task.results)
+    # juju.run() raises TaskError on a non-zero return code, but keep the
+    # explicit check to mirror the original pytest-operator assertion.
+    assert task.return_code == 0, f"namespace creation failed: {task}"
 
 
 def get_application_url(juju: jubilant.Juju, application, port):
@@ -281,7 +284,7 @@ def perform_temporal_integrations(juju: jubilant.Juju):
     juju.integrate(f"{APP_NAME_SERVER}:temporal-host-info", f"{APP_NAME_ADMIN}:temporal-host-info")
     juju.wait(lambda status: jubilant.all_active(status, APP_NAME_SERVER), timeout=180)
 
-    assert juju.status().apps[APP_NAME_SERVER].units[f"{APP_NAME_SERVER}/0"].workload_status.is_active()
+    assert juju.status().apps[APP_NAME_SERVER].units[f"{APP_NAME_SERVER}/0"].workload_status.current == "active"
 
 
 def scale(juju: jubilant.Juju, app, units):
@@ -329,7 +332,7 @@ def setup_temporal_ecosystem(juju: jubilant.Juju):
         register_temporal_namespace(juju, "default")
 
         juju.wait(lambda status: jubilant.all_active(status, APP_NAME_SERVER), timeout=300)
-        assert juju.status().apps[APP_NAME_SERVER].units[f"{APP_NAME_SERVER}/0"].workload_status.is_active()
+        assert juju.status().apps[APP_NAME_SERVER].units[f"{APP_NAME_SERVER}/0"].workload_status.current == "active"
 
 
 def read_unit_statuses(juju: jubilant.Juju, application: str):
