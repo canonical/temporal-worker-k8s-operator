@@ -66,6 +66,6 @@ class TestUpgrade:
             lambda status: jubilant.all_active(status, APP_NAME),
             timeout=600,
         )
-        assert juju.status().apps[APP_NAME].units[f"{APP_NAME}/0"].workload_status.is_active()
+        assert juju.status().apps[APP_NAME].units[f"{APP_NAME}/0"].workload_status.current == "active"
 
         run_sample_workflow(juju)

@@ -78,4 +78,4 @@ def deploy(juju: jubilant.Juju, charm: pathlib.Path, temporal_worker_image: str)
     with fast_forward(juju):
         juju.wait(lambda status: jubilant.all_active(status, APP_NAME), timeout=600)
 
-    assert juju.status().apps[APP_NAME].units[f"{APP_NAME}/0"].workload_status.is_active()
+    assert juju.status().apps[APP_NAME].units[f"{APP_NAME}/0"].workload_status.current == "active"
