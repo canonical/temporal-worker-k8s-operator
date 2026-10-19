@@ -4,12 +4,17 @@
 """Temporal worker charm temporal-worker-info integration tests."""
 
 import logging
-from pathlib import Path
+import pathlib
+import subprocess
 
+import jubilant
 import pytest
-import pytest_asyncio
-from helpers import APP_NAME, register_temporal_namespace, wait_for_status_message
-from pytest_operator.plugin import OpsTest
+from helpers import (
+    APP_NAME,
+    fast_forward,
+    register_temporal_namespace,
+    wait_for_status_message,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -17,12 +22,14 @@ logger = logging.getLogger(__name__)
 _EXPECTED_WORKER_STATUS = "worker listening to namespace 'test-namespace' on queue 'test-queue'"
 
 
-@pytest_asyncio.fixture(scope="module")
-async def worker_info_requirer_charm(ops_test: OpsTest) -> str | Path:
-    """Fetch the path to charm."""
-    charm = await ops_test.build_charm("./tests/integration/worker_info_requirer")
-    assert charm, "Charm not built"
-    return charm
+@pytest.fixture(scope="module")
+def worker_info_requirer_charm() -> pathlib.Path:
+    """Pack the worker-info requirer test charm and return its path."""
+    charm_dir = pathlib.Path("./tests/integration/worker_info_requirer")
+    subprocess.run(["charmcraft", "pack"], cwd=charm_dir, check=True)
+    packed = sorted(charm_dir.glob("*.charm"))
+    assert packed, "worker-info requirer charm not packed"
+    return packed[0].resolve()
 
 
 @pytest.mark.abort_on_fail
@@ -30,41 +37,40 @@ async def worker_info_requirer_charm(ops_test: OpsTest) -> str | Path:
 class TestTemporalWorkerInfoRelation:
     """Integration tests for temporal-worker-info relation."""
 
-    async def test_relation(
+    def test_relation(
         self,
-        ops_test: OpsTest,
-        worker_info_requirer_charm: str | Path,
+        juju: jubilant.Juju,
+        worker_info_requirer_charm: pathlib.Path,
         temporal_worker_image: str,
     ):
         """Verify requirer receives namespace and queue over relation."""
-        await register_temporal_namespace(ops_test, "test-namespace")
+        register_temporal_namespace(juju, "test-namespace")
         cfg = {
             "namespace": "test-namespace",
             "queue": "test-queue",
         }
-        await ops_test.model.applications[APP_NAME].set_config(cfg)
-        async with ops_test.fast_forward():
-            await ops_test.model.wait_for_idle(
-                apps=[APP_NAME],
-                status="active",
-                raise_on_blocked=False,
+        juju.config(APP_NAME, cfg)
+        with fast_forward(juju):
+            juju.wait(
+                lambda status: jubilant.all_active(status, APP_NAME),
                 timeout=600,
             )
-        await wait_for_status_message(ops_test, APP_NAME, 1, _EXPECTED_WORKER_STATUS, timeout=600, cadence=3)
-        await ops_test.model.deploy(
+        wait_for_status_message(juju, APP_NAME, 1, _EXPECTED_WORKER_STATUS, timeout=600, cadence=3)
+        juju.deploy(
             worker_info_requirer_charm,
-            application_name="worker-info-requirer",
+            app="worker-info-requirer",
             resources={"workload": temporal_worker_image},
         )
-        await ops_test.model.wait_for_idle(
-            apps=["worker-info-requirer"], status="waiting", raise_on_blocked=False, timeout=300
+        juju.wait(
+            lambda status: jubilant.all_waiting(status, "worker-info-requirer"),
+            timeout=300,
         )
-        await ops_test.model.integrate("worker-info-requirer:temporal-worker-info", f"{APP_NAME}:temporal-worker-info")
-        await ops_test.model.wait_for_idle(
-            apps=["worker-info-requirer"], status="active", raise_on_blocked=False, timeout=300
+        juju.integrate("worker-info-requirer:temporal-worker-info", f"{APP_NAME}:temporal-worker-info")
+        juju.wait(
+            lambda status: jubilant.all_active(status, "worker-info-requirer"),
+            timeout=300,
         )
-        requirer_app = ops_test.model.applications["worker-info-requirer"]
-        requirer_unit = requirer_app.units[0]
+        requirer_unit = juju.status().apps["worker-info-requirer"].units["worker-info-requirer/0"]
         expected_status = "Temporal namespace: test-namespace, queue: test-queue"
-        assert requirer_unit.workload_status == "active"
-        assert requirer_unit.workload_status_message == expected_status
+        assert requirer_unit.workload_status.current == "active"
+        assert requirer_unit.workload_status.message == expected_status

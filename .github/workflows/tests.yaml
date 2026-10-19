@@ -87,6 +87,7 @@ jobs:
       matrix:
         test:
           - test_charm
+          - test_host_info
           - test_observability
           - test_postgres_db
           - test_scaling

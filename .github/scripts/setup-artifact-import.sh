@@ -2,4 +2,4 @@
 set -euxo pipefail
 
 echo "Starting local registry so the temporal-worker rock can be pushed for the integration tests..."
-docker run -d -p 32000:5000 --restart=always --name registry registry:2 || true
+sudo docker run -d -p 32000:5000 --restart=always --name registry registry:2 || true
