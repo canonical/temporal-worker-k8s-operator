@@ -11,17 +11,6 @@ import pytest
 from charm import TemporalWorkerK8SOperatorCharm
 
 
-def pytest_configure(config):  # noqa: DCO020
-    """Flags that can be configured to modify fixture behavior.
-
-    Used to determine how _state in the peer relation app databag is populated.
-
-    Args:
-        config: the pytest config object
-    """
-    config.addinivalue_line("markers", "database_relation_skipped")
-
-
 @pytest.fixture
 def temporal_worker_k8s_charm(monkeypatch):
     yield TemporalWorkerK8SOperatorCharm
@@ -100,21 +89,8 @@ def role_credentials(role_secret, vault_nonce_value):
 
 
 @pytest.fixture(scope="function")
-def peer_relation(request):
-    state_data = {}
-
-    if not request.node.get_closest_marker("database_relation_skipped"):
-        state_data["database_connection"] = json.dumps(
-            {
-                "host": "myhost",
-                "port": "5432",
-                "password": "inner-light",
-                "user": "jean-luc",
-                "tls": "True",
-            }
-        )
-
-    return ops.testing.PeerRelation(endpoint="peer", local_app_data=state_data)
+def peer_relation():
+    return ops.testing.PeerRelation(endpoint="peer")
 
 
 @pytest.fixture(scope="function")

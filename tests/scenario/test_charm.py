@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 import dataclasses
+import json
 import logging
 import textwrap
 import unittest.mock
@@ -651,7 +652,6 @@ def test_auth_secret_overrides_environment_auth_keys(
         assert actual_env[key] == value
 
 
-@pytest.mark.database_relation_skipped
 def test_blocked_by_missing_db_name(context, state, temporal_worker_container, config):
     config_without_db_name = {**config}
     del config_without_db_name["db-name"]
@@ -967,10 +967,11 @@ def test_deprecated_host_ignores_tls_check(context, state, temporal_worker_conta
     assert _get_plan_environment(state_out)["TEMPORAL_HOST"] == "test-host"
 
 
-@pytest.mark.database_relation_skipped
 @pytest.mark.parametrize("leader", [True, False])
 def test_waiting_for_database_credentials(context, state, temporal_worker_container, leader):
-    state = dataclasses.replace(state, leader=leader)
+    incomplete_database_relation = ops.testing.Relation("database", remote_app_data={"endpoints": "myhost:5432"})
+    relations = [relation for relation in state.relations if relation.endpoint != "database"]
+    state = dataclasses.replace(state, leader=leader, relations=[*relations, incomplete_database_relation])
     state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
 
     assert state_out.unit_status == ops.WaitingStatus("waiting for database credentials")
@@ -994,3 +995,318 @@ def test_leader_ignores_peer_relation_changed(context, state, peer_relation):
     state_out = context.run(context.on.relation_changed(peer_relation), state)
 
     assert not state_out.get_container("temporal-worker").plan.services
+
+
+ACTIVE_STATUS_MESSAGE = "worker listening to namespace 'test-namespace' on queue 'test-queue'"
+LEGACY_DATABASE_CONNECTION = {
+    "host": "myhost",
+    "port": "5432",
+    "password": "inner-light",
+    "user": "jean-luc",
+    "tls": "True",
+}
+
+
+def _with_relation(state, relation, **changes):
+    """Return the state with the relation replaced by a copy of it with the changes applied."""
+    updated = dataclasses.replace(relation, **changes)
+    return dataclasses.replace(state, relations=[updated if r.id == relation.id else r for r in state.relations])
+
+
+def _with_container(state, container, **changes):
+    """Return the state with the container replaced by a copy of it with the changes applied."""
+    return dataclasses.replace(state, containers={dataclasses.replace(container, **changes)})
+
+
+@pytest.fixture
+def user_secret():
+    return ops.testing.Secret(tracked_content={"key": "value"})
+
+
+@pytest.fixture
+def replan_spy():
+    original = ops.Container.replan
+    with unittest.mock.patch("ops.Container.replan", autospec=True, side_effect=original) as spy:
+        yield spy
+
+
+def test_reconcile_does_not_replan_when_nothing_changed(
+    context, state, temporal_worker_container, replan_spy, user_secret
+):
+    state = dataclasses.replace(state, secrets=[*state.secrets, user_secret])
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+    plan = state_out.get_container("temporal-worker").plan.to_dict()
+    assert replan_spy.call_count == 1
+
+    for event in (
+        context.on.config_changed(),
+        context.on.update_status(),
+        context.on.secret_changed(user_secret),
+        context.on.upgrade_charm(),
+    ):
+        state_out = context.run(event, state_out)
+        assert state_out.unit_status == ops.ActiveStatus(ACTIVE_STATUS_MESSAGE)
+
+    assert replan_spy.call_count == 1
+    assert state_out.get_container("temporal-worker").plan.to_dict() == plan
+
+
+def test_reconcile_replans_when_the_plan_changes(context, state, temporal_worker_container, replan_spy, config):
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+
+    state_out = dataclasses.replace(state_out, config={**config, "queue": "another-queue"})
+    state_out = context.run(context.on.config_changed(), state_out)
+
+    assert replan_spy.call_count == 2
+    assert _get_plan_environment(state_out)["TEMPORAL_QUEUE"] == "another-queue"
+    assert state_out.unit_status == ops.ActiveStatus(
+        "worker listening to namespace 'test-namespace' on queue 'another-queue'"
+    )
+
+
+def test_reconcile_replans_when_the_service_is_not_running(context, state, temporal_worker_container, replan_spy):
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+    container = state_out.get_container("temporal-worker")
+    state_out = _with_container(
+        state_out, container, service_statuses={"temporal-worker": ops.pebble.ServiceStatus.INACTIVE}
+    )
+
+    state_out = context.run(context.on.config_changed(), state_out)
+
+    assert replan_spy.call_count == 2
+    assert (
+        state_out.get_container("temporal-worker").service_statuses["temporal-worker"]
+        == ops.pebble.ServiceStatus.ACTIVE
+    )
+
+
+@pytest.mark.parametrize(
+    "event_name",
+    ["pebble_ready", "config_changed", "update_status", "secret_changed", "upgrade_charm", "database_changed"],
+)
+def test_events_are_not_deferred_when_pebble_is_not_reachable(
+    context, state, temporal_worker_container, user_secret, database_relation, event_name
+):
+    """The next event reconciles from the source of truth: nothing is deferred."""
+    events = {
+        "pebble_ready": context.on.pebble_ready(temporal_worker_container),
+        "config_changed": context.on.config_changed(),
+        "update_status": context.on.update_status(),
+        "secret_changed": context.on.secret_changed(user_secret),
+        "upgrade_charm": context.on.upgrade_charm(),
+        "database_changed": context.on.relation_changed(database_relation),
+    }
+    state = dataclasses.replace(state, secrets=[*state.secrets, user_secret])
+    state = _with_container(state, temporal_worker_container, can_connect=False)
+
+    state_out = context.run(events[event_name], state)
+
+    assert state_out.deferred == []
+    assert state_out.unit_status == ops.WaitingStatus("waiting for pebble api")
+
+
+@pytest.mark.parametrize("event_name", ["pebble_ready", "database_changed"])
+def test_events_are_ignored_without_peer_relation(
+    context, state, temporal_worker_container, database_relation, event_name
+):
+    events = {
+        "pebble_ready": context.on.pebble_ready(temporal_worker_container),
+        "database_changed": context.on.relation_changed(database_relation),
+    }
+    state = dataclasses.replace(
+        state,
+        relations=[relation for relation in state.relations if relation.endpoint != "peer"],
+        unit_status=ops.MaintenanceStatus("previous status"),
+    )
+
+    state_out = context.run(events[event_name], state)
+
+    assert state_out.deferred == []
+    assert state_out.unit_status == ops.MaintenanceStatus("previous status")
+    assert not state_out.get_container("temporal-worker").plan.services
+
+
+def test_update_status_blocks_without_peer_relation(context, state):
+    state = dataclasses.replace(
+        state, relations=[relation for relation in state.relations if relation.endpoint != "peer"]
+    )
+
+    state_out = context.run(context.on.update_status(), state)
+
+    assert state_out.deferred == []
+    assert state_out.unit_status == ops.BlockedStatus("peer relation not ready")
+
+
+def test_install_creates_the_vault_nonce_secret_and_keeps_the_status(context, state):
+    state = dataclasses.replace(state, secrets=[], unit_status=ops.MaintenanceStatus("previous status"))
+
+    state_out = context.run(context.on.install(), state)
+
+    assert [secret.label for secret in state_out.secrets] == ["nonce"]
+    assert state_out.unit_status == ops.MaintenanceStatus("previous status")
+    assert not state_out.get_container("temporal-worker").plan.services
+
+
+@pytest.mark.parametrize("leader", [True, False])
+def test_database_credentials_are_read_from_the_database_relation(
+    context, state, temporal_worker_container, database_relation, peer_relation, leader
+):
+    """Every unit reads the credentials from the relation, whatever the peer relation holds."""
+    state = dataclasses.replace(state, leader=leader)
+
+    state_out = context.run(context.on.relation_changed(database_relation), state)
+
+    assert {k: _get_plan_environment(state_out)[k] for k in DATABASE_CONFIG} == DATABASE_CONFIG
+    assert state_out.unit_status == ops.ActiveStatus(ACTIVE_STATUS_MESSAGE)
+    assert set(state_out.get_relation(peer_relation.id).local_app_data) <= {"database_connection"}
+
+
+def test_stale_peer_database_connection_is_ignored(context, state, temporal_worker_container, peer_relation):
+    stale = {**LEGACY_DATABASE_CONNECTION, "host": "stale-host", "password": "stale-password"}
+    state = _with_relation(state, peer_relation, local_app_data={"database_connection": json.dumps(stale)})
+
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+
+    assert {k: _get_plan_environment(state_out)[k] for k in DATABASE_CONFIG} == DATABASE_CONFIG
+
+
+def test_leader_keeps_the_legacy_database_connection_up_to_date(context, state, database_relation, peer_relation):
+    """The previous revisions read the connection from the peer relation during a rolling upgrade."""
+    state_out = context.run(context.on.relation_changed(database_relation), state)
+
+    peer_data = state_out.get_relation(peer_relation.id).local_app_data
+    assert json.loads(peer_data["database_connection"]) == LEGACY_DATABASE_CONNECTION
+    assert list(json.loads(peer_data["database_connection"])) == list(LEGACY_DATABASE_CONNECTION)
+
+
+def test_non_leader_does_not_write_the_legacy_database_connection(context, state, database_relation, peer_relation):
+    state = dataclasses.replace(state, leader=False)
+
+    state_out = context.run(context.on.relation_changed(database_relation), state)
+
+    assert state_out.get_relation(peer_relation.id).local_app_data == {}
+
+
+def test_legacy_database_connection_is_kept_while_the_relation_has_no_credentials(
+    context, state, temporal_worker_container, database_relation, peer_relation
+):
+    legacy = {"database_connection": json.dumps(LEGACY_DATABASE_CONNECTION)}
+    state = _with_relation(state, peer_relation, local_app_data=legacy)
+    state = _with_relation(state, database_relation, remote_app_data={"endpoints": "myhost:5432"})
+
+    state_out = context.run(context.on.relation_changed(state.get_relation(database_relation.id)), state)
+
+    assert state_out.get_relation(peer_relation.id).local_app_data == legacy
+    assert state_out.unit_status == ops.WaitingStatus("waiting for database credentials")
+
+
+def test_database_relation_broken(context, state, temporal_worker_container, database_relation, peer_relation):
+    state_out = context.run(context.on.relation_changed(database_relation), state)
+    assert "TEMPORAL_DB_HOST" in _get_plan_environment(state_out)
+
+    state_out = context.run(context.on.relation_broken(state_out.get_relation(database_relation.id)), state_out)
+
+    assert not set(DATABASE_CONFIG) & set(_get_plan_environment(state_out))
+    assert state_out.unit_status == ops.ActiveStatus(ACTIVE_STATUS_MESSAGE)
+    assert state_out.get_relation(peer_relation.id).local_app_data == {"database_connection": "null"}
+
+
+@pytest.mark.parametrize("leader", [True, False])
+def test_update_status_applies_rotated_database_credentials(
+    context, state, temporal_worker_container, database_relation, leader
+):
+    state = dataclasses.replace(state, leader=leader)
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+    assert state_out.unit_status == ops.ActiveStatus(ACTIVE_STATUS_MESSAGE)
+
+    rotated = {**database_relation.remote_app_data, "password": "rotated-password"}
+    state_out = _with_relation(state_out, state_out.get_relation(database_relation.id), remote_app_data=rotated)
+    state_out = context.run(context.on.update_status(), state_out)
+
+    assert _get_plan_environment(state_out)["TEMPORAL_DB_PASSWORD"] == "rotated-password"
+    assert state_out.unit_status == ops.ActiveStatus(ACTIVE_STATUS_MESSAGE)
+
+
+def test_update_status_keeps_the_active_status_when_the_plan_is_up_to_date(
+    context, state, temporal_worker_container, replan_spy
+):
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+
+    state_out = context.run(context.on.update_status(), state_out)
+
+    assert replan_spy.call_count == 1
+    assert state_out.unit_status == ops.ActiveStatus(ACTIVE_STATUS_MESSAGE)
+
+
+def test_vault_relation_joined_requests_credentials_without_changing_the_status(context, state, vault_relation):
+    state = dataclasses.replace(state, unit_status=ops.MaintenanceStatus("previous status"))
+
+    state_out = context.run(context.on.relation_joined(vault_relation), state)
+
+    unit_data = state_out.get_relation(vault_relation.id).local_unit_data
+    assert unit_data["nonce"] == "test_nonce"
+    assert unit_data["egress_subnet"]
+    assert state_out.unit_status == ops.MaintenanceStatus("previous status")
+    assert not state_out.get_container("temporal-worker").plan.services
+
+
+def test_config_changed_requests_vault_credentials(context, state, vault_relation):
+    state_out = context.run(context.on.config_changed(), state)
+
+    assert state_out.get_relation(vault_relation.id).local_unit_data["nonce"] == "test_nonce"
+
+
+def test_vault_ready_reconciles(context, state, vault_relation):
+    state = _with_relation(state, vault_relation, local_unit_data={"nonce": "test_nonce"})
+
+    state_out = context.run(context.on.relation_changed(state.get_relation(vault_relation.id)), state)
+
+    assert state_out.unit_status == ops.ActiveStatus(ACTIVE_STATUS_MESSAGE)
+    assert state_out.get_container("temporal-worker").plan.services
+
+
+def test_vault_gone_away_reconciles(context, state, vault_relation):
+    state_out = context.run(context.on.relation_broken(vault_relation), state)
+
+    assert state_out.unit_status == ops.ActiveStatus(ACTIVE_STATUS_MESSAGE)
+    assert state_out.get_container("temporal-worker").plan.services
+
+
+def test_host_info_relation_changed_reconciles(context, state):
+    state = _host_info_state(state, tls=False, config={"host": ""})
+    host_info = state.get_relations("temporal-host-info")[0]
+
+    state_out = context.run(context.on.relation_changed(host_info), state)
+
+    assert state_out.unit_status == ops.ActiveStatus(ACTIVE_STATUS_MESSAGE)
+    assert _get_plan_environment(state_out)["TEMPORAL_HOST"] == f"{FRONTEND_HOST}:7233"
+
+
+def test_host_info_relation_broken_falls_back_to_the_host_config(context, state):
+    state = _host_info_state(state, tls=False)
+    host_info = state.get_relations("temporal-host-info")[0]
+    state_out = context.run(context.on.relation_changed(host_info), state)
+    assert _get_plan_environment(state_out)["TEMPORAL_HOST"] == f"{FRONTEND_HOST}:7233"
+
+    state_out = context.run(context.on.relation_broken(host_info), state_out)
+
+    assert state_out.unit_status == ops.ActiveStatus(ACTIVE_STATUS_MESSAGE)
+    assert _get_plan_environment(state_out)["TEMPORAL_HOST"] == "test-host"
+
+
+def test_host_info_relation_broken_without_host_config_blocks(context, state):
+    state = _host_info_state(state, tls=False, config={"host": ""})
+    host_info = state.get_relations("temporal-host-info")[0]
+
+    state_out = context.run(context.on.relation_broken(host_info), state)
+
+    assert state_out.unit_status == ops.BlockedStatus(
+        "temporal-host-info relation not established; set deprecated `host` config as fallback"
+    )
+
+
+def test_upgrade_charm_reconciles(context, state):
+    state_out = context.run(context.on.upgrade_charm(), state)
+
+    assert state_out.unit_status == ops.ActiveStatus(ACTIVE_STATUS_MESSAGE)
+    assert state_out.get_container("temporal-worker").plan.services
