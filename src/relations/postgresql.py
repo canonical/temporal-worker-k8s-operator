@@ -3,99 +3,44 @@
 
 """Define the Temporal worker postgresql relation."""
 
+import json
 import logging
 
-from ops import framework
-from ops.model import WaitingStatus
-
-from log import log_event_handler
+from ops import RelationBrokenEvent
 
 logger = logging.getLogger(__name__)
 
+# Peer application databag key read by the previous revisions of the charm.
+LEGACY_DATABASE_CONNECTION_KEY = "database_connection"
 
-class Postgresql(framework.Object):
-    """Client for postgresql relations."""
+
+class Postgresql:
+    """Reader of the postgresql relation."""
 
     def __init__(self, charm):
         """Construct.
 
         Args:
-            charm: The charm to attach the hooks to.
+            charm: The charm owning the relation.
         """
-        super().__init__(charm, "database")
         self.charm = charm
 
-        charm.framework.observe(charm.database.on.database_created, self._on_database_changed)
-        charm.framework.observe(charm.database.on.endpoints_changed, self._on_database_changed)
-        charm.framework.observe(charm.on.database_relation_broken, self._on_database_relation_broken)
-
-    @log_event_handler(logger)
-    def _on_database_changed(self, event) -> None:
-        """Handle database creation/change events.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        if not self.charm.unit.is_leader():
-            return
-
-        if not self.charm._state.is_ready():
-            event.defer()
-            return
-
-        self.charm.unit.status = WaitingStatus(f"handling {event.relation.name} change")
-
-        self.update_db_relation_data_in_state(event)
-        self.charm._update(event)
-
-    @log_event_handler(logger)
-    def _on_database_relation_broken(self, event) -> None:
-        """Handle broken relations with the database.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        if not self.charm.unit.is_leader():
-            return
-
-        if not self.charm._state.is_ready():
-            event.defer()
-            return
-
-        self.charm._state.database_connection = None
-        self.charm._update(event)
-
-    # flake8: noqa: C901
-    def update_db_relation_data_in_state(self, event) -> bool:
-        """Update database data from relation into peer relation databag.
-
-        Args:
-            event: The event triggering the DB update.
+    def connection(self) -> dict | None:
+        """Read the database connection info from the database relation.
 
         Returns:
-            True if the charm should update its pebble layer, False otherwise.
+            The connection info, or None if the relation does not provide a usable connection yet.
         """
-        if not self.charm.unit.is_leader():
-            return False
+        relation = self.charm.model.get_relation("database")
+        if relation is None:
+            return None
 
-        if not self.charm._state.is_ready():
-            logger.info("charm peer state not ready, deferring db update event")
-            event.defer()
-            return False
-
-        if self.charm.model.get_relation("database") is None:
-            return False
-
-        relation_id = self.charm.database.relations[0].id
-        relation_data = self.charm.database.fetch_relation_data()[relation_id]
+        relation_data = self.charm.database.fetch_relation_data().get(relation.id, {})
 
         endpoints = relation_data.get("endpoints", "").split(",")
-        if len(endpoints) < 1:
-            return False
-
         primary_endpoint = endpoints[0].split(":")
         if len(primary_endpoint) < 2:
-            return False
+            return None
 
         db_conn = {
             "host": primary_endpoint[0],
@@ -106,14 +51,32 @@ class Postgresql(framework.Object):
         }
 
         if None in (db_conn["user"], db_conn["password"]):
-            return False
+            return None
 
-        should_update = False
-        fields_to_check = ["host", "user", "password", "tls"]
-        database_connection = self.charm._state.database_connection or {}
-        if any(database_connection.get(field, "") != db_conn[field] for field in fields_to_check):
-            should_update = True
+        return db_conn
 
-        self.charm._state.database_connection = db_conn
+    def sync_legacy_peer_state(self, event) -> None:
+        """Keep the `database_connection` value of the previous revisions up to date; leader only.
 
-        return should_update
+        This unit reads the connection info from the database relation. During a rolling upgrade, the units still
+        running a previous revision read it from the peer relation, where it is JSON encoded, and the leader may
+        already be upgraded and the only one updating it: the value is never removed or reshaped, and kept up to
+        date, in the format of the previous revisions, for as long as the relation provides data.
+
+        Args:
+            event: The event being reconciled.
+        """
+        peer = self.charm.model.get_relation("peer")
+        if not self.charm.unit.is_leader() or peer is None:
+            return
+
+        if isinstance(event, RelationBrokenEvent) and event.relation.name == "database":
+            connection = None
+        else:
+            connection = self.connection()
+            if connection is None:
+                return
+
+        encoded = json.dumps(connection)
+        if peer.data[self.charm.app].get(LEGACY_DATABASE_CONNECTION_KEY) != encoded:
+            peer.data[self.charm.app][LEGACY_DATABASE_CONNECTION_KEY] = encoded
