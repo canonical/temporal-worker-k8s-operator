@@ -779,17 +779,11 @@ def test_update_status_restores_active_after_restart_action(
     assert state_out.unit_status == ops.ActiveStatus(f"worker listening to namespace {namespace!r} on queue {queue!r}")
 
 
-@pytest.mark.parametrize(
-    "blocked_message",
-    [
-        "temporal-worker service is not running; check logs for crash details",
-        "eviction loop detected - fix workflow code before restarting",
-    ],
-)
-def test_update_status_keeps_blocked_while_pebble_check_failing(
-    context, state, temporal_worker_container, blocked_message
+@pytest.mark.parametrize("event_name", ["config_changed", "update_status", "rotated_database_credentials"])
+def test_reconcile_blocks_while_pebble_check_is_failing(
+    context, state, temporal_worker_container, database_relation, event_name
 ):
-    """A failing pebble check must not be masked by update-status; pebble-check-recovered clears it."""
+    """Reconciliation applies current inputs but does not mask a failing worker check."""
     state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
     state_out = context.run(context.on.config_changed(), state_out)
 
@@ -802,11 +796,88 @@ def test_update_status_keeps_blocked_while_pebble_check_failing(
         threshold=3,
     )
     container = dataclasses.replace(state_out.get_container("temporal-worker"), check_infos=frozenset([check_info]))
-    state_out = dataclasses.replace(state_out, containers={container}, unit_status=ops.BlockedStatus(blocked_message))
+    state_out = dataclasses.replace(state_out, containers={container})
+
+    if event_name == "config_changed":
+        state_out = context.run(context.on.config_changed(), state_out)
+    else:
+        if event_name == "rotated_database_credentials":
+            rotated = {**database_relation.remote_app_data, "password": "rotated-password"}
+            state_out = _with_relation(state_out, state_out.get_relation(database_relation.id), remote_app_data=rotated)
+        state_out = context.run(context.on.update_status(), state_out)
+
+    assert state_out.unit_status == ops.BlockedStatus(
+        "temporal-worker service is not running; check logs for crash details"
+    )
+    if event_name == "rotated_database_credentials":
+        assert _get_plan_environment(state_out)["TEMPORAL_DB_PASSWORD"] == "rotated-password"
+
+
+def test_eviction_check_takes_priority_when_multiple_pebble_checks_are_down(context, state, temporal_worker_container):
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+    state_out = context.run(context.on.config_changed(), state_out)
+
+    start_worker_check = ops.testing.CheckInfo(
+        name="start-worker-check",
+        level=ops.pebble.CheckLevel.UNSET,
+        startup=ops.pebble.CheckStartup.UNSET,
+        status=ops.pebble.CheckStatus.DOWN,
+        failures=3,
+        threshold=3,
+    )
+    eviction_check = ops.testing.CheckInfo(
+        name="eviction-loop-check",
+        level=ops.pebble.CheckLevel.UNSET,
+        startup=ops.pebble.CheckStartup.UNSET,
+        status=ops.pebble.CheckStatus.DOWN,
+        failures=1,
+        threshold=1,
+    )
+    container = dataclasses.replace(
+        state_out.get_container("temporal-worker"),
+        check_infos=frozenset([start_worker_check, eviction_check]),
+    )
+    state_out = dataclasses.replace(state_out, containers={container})
 
     state_out = context.run(context.on.update_status(), state_out)
 
-    assert state_out.unit_status == ops.BlockedStatus(blocked_message)
+    assert state_out.unit_status == ops.BlockedStatus("eviction loop detected - fix workflow code before restarting")
+
+
+def test_pebble_check_recovered_does_not_mask_another_down_check(context, state, temporal_worker_container):
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+    state_out = context.run(context.on.config_changed(), state_out)
+
+    start_worker_check = ops.testing.CheckInfo(
+        name="start-worker-check",
+        level=ops.pebble.CheckLevel.UNSET,
+        startup=ops.pebble.CheckStartup.UNSET,
+        status=ops.pebble.CheckStatus.DOWN,
+        failures=3,
+        threshold=3,
+    )
+    eviction_check = ops.testing.CheckInfo(
+        name="eviction-loop-check",
+        level=ops.pebble.CheckLevel.UNSET,
+        startup=ops.pebble.CheckStartup.UNSET,
+        status=ops.pebble.CheckStatus.DOWN,
+        failures=1,
+        threshold=1,
+    )
+    container = dataclasses.replace(
+        state_out.get_container("temporal-worker"),
+        check_infos=frozenset([start_worker_check, eviction_check]),
+    )
+    state_out = dataclasses.replace(state_out, containers={container})
+
+    recovered_check = dataclasses.replace(start_worker_check, status=ops.pebble.CheckStatus.UP, failures=0)
+    container = dataclasses.replace(container, check_infos=frozenset([recovered_check, eviction_check]))
+    state_out = dataclasses.replace(state_out, containers={container})
+
+    with unittest.mock.patch("scenario._consistency_checker.check_consistency"):
+        state_out = context.run(context.on.pebble_check_recovered(container, recovered_check), state_out)
+
+    assert state_out.unit_status == ops.BlockedStatus("eviction loop detected - fix workflow code before restarting")
 
 
 def test_db_relation(context, state, temporal_worker_container):
@@ -1212,18 +1283,104 @@ def test_database_relation_broken(context, state, temporal_worker_container, dat
 
 
 @pytest.mark.parametrize("leader", [True, False])
+@pytest.mark.parametrize(
+    "relation_changes, expected_database_environment",
+    [
+        (
+            {"username": "rotated-user"},
+            {
+                **DATABASE_CONFIG,
+                "TEMPORAL_DB_USER": "rotated-user",
+            },
+        ),
+        (
+            {"password": "rotated-password"},
+            {
+                **DATABASE_CONFIG,
+                "TEMPORAL_DB_PASSWORD": "rotated-password",
+            },
+        ),
+        (
+            {"endpoints": "rotated-host:5432,anotherhost:2345"},
+            {
+                **DATABASE_CONFIG,
+                "TEMPORAL_DB_HOST": "rotated-host",
+            },
+        ),
+        (
+            {"endpoints": "myhost:6543,anotherhost:2345"},
+            {
+                **DATABASE_CONFIG,
+                "TEMPORAL_DB_PORT": "6543",
+            },
+        ),
+        (
+            {"tls": "False"},
+            {
+                **DATABASE_CONFIG,
+                "TEMPORAL_DB_TLS": "False",
+            },
+        ),
+    ],
+    ids=["username", "password", "host", "port", "tls"],
+)
 def test_update_status_applies_rotated_database_credentials(
-    context, state, temporal_worker_container, database_relation, leader
+    context,
+    state,
+    temporal_worker_container,
+    database_relation,
+    leader,
+    replan_spy,
+    relation_changes,
+    expected_database_environment,
 ):
     state = dataclasses.replace(state, leader=leader)
     state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
     assert state_out.unit_status == ops.ActiveStatus(ACTIVE_STATUS_MESSAGE)
+    assert replan_spy.call_count == 1
 
-    rotated = {**database_relation.remote_app_data, "password": "rotated-password"}
+    rotated = {**database_relation.remote_app_data, **relation_changes}
     state_out = _with_relation(state_out, state_out.get_relation(database_relation.id), remote_app_data=rotated)
     state_out = context.run(context.on.update_status(), state_out)
 
-    assert _get_plan_environment(state_out)["TEMPORAL_DB_PASSWORD"] == "rotated-password"
+    expected_environment = {
+        **WANT_ENV,
+        **expected_database_environment,
+        "TEMPORAL_DB_NAME": "temporal-worker-k8s_db",
+        "TWC_DB_NAME": "temporal-worker-k8s_db",
+    }
+    assert _get_plan_environment(state_out) == expected_environment
+    assert replan_spy.call_count == 2
+    assert state_out.unit_status == ops.ActiveStatus(ACTIVE_STATUS_MESSAGE)
+
+    state_out = context.run(context.on.update_status(), state_out)
+
+    assert _get_plan_environment(state_out) == expected_environment
+    assert replan_spy.call_count == 2
+    assert state_out.unit_status == ops.ActiveStatus(ACTIVE_STATUS_MESSAGE)
+
+
+def test_update_status_removes_database_environment_when_relation_is_gone(
+    context, state, temporal_worker_container, replan_spy
+):
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+    assert set(DATABASE_CONFIG) <= set(_get_plan_environment(state_out))
+    assert replan_spy.call_count == 1
+
+    state_out = dataclasses.replace(
+        state_out,
+        relations=[relation for relation in state_out.relations if relation.endpoint != "database"],
+    )
+    state_out = context.run(context.on.update_status(), state_out)
+
+    assert not set(DATABASE_CONFIG) & set(_get_plan_environment(state_out))
+    assert state_out.unit_status == ops.ActiveStatus(ACTIVE_STATUS_MESSAGE)
+    assert replan_spy.call_count == 2
+
+    state_out = context.run(context.on.update_status(), state_out)
+
+    assert not set(DATABASE_CONFIG) & set(_get_plan_environment(state_out))
+    assert replan_spy.call_count == 2
     assert state_out.unit_status == ops.ActiveStatus(ACTIVE_STATUS_MESSAGE)
 
 
