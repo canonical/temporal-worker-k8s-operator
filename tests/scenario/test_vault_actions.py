@@ -23,7 +23,6 @@ import pytest
 
 from vault.actions import VaultActions
 
-
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
