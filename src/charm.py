@@ -24,12 +24,10 @@ from ops import (
     ConfigChangedEvent,
     InstallEvent,
     PebbleCheckFailedEvent,
-    PebbleCheckRecoveredEvent,
     PebbleReadyEvent,
     RelationChangedEvent,
     RelationEvent,
     RelationJoinedEvent,
-    UpdateStatusEvent,
     main,
     pebble,
 )
@@ -181,15 +179,13 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
                 raise ExitWithoutStatusChange()
 
             container = self.unit.get_container(self._service_name)
-            if isinstance(event, UpdateStatusEvent):
-                self._check_update_status(container)
-
             self._check_container_can_connect(container)
             self._check_entrypoint(container)
             charm_config_env, auth_config = self._check_configuration()
             db_conn = self._check_database_connection()
             context = self._build_context(charm_config_env, auth_config, db_conn)
             self._apply_layer(container, context)
+            self._check_failing_pebble_checks(container)
         except ExitWithoutStatusChange:
             return
         except ExitWithStatusError as e:
@@ -210,23 +206,10 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             event: The event being reconciled.
 
         Raises:
-            ExitWithStatusError: If the event reports the status of the unit.
             ExitWithoutStatusChange: If the event is fully handled.
         """
         if isinstance(event, PebbleCheckFailedEvent):
-            if event.info.name == "eviction-loop-check":
-                logger.error(
-                    "Temporal SDK workflow eviction loop detected: the worker has stuck slots "
-                    "and may not complete workflow tasks. "
-                    "Fix the workflow code before restarting the worker."
-                )
-                raise ExitWithStatusError("eviction loop detected - fix workflow code before restarting", BlockedStatus)
-            raise ExitWithStatusError(
-                "temporal-worker service is not running; check logs for crash details", BlockedStatus
-            )
-
-        if isinstance(event, PebbleCheckRecoveredEvent):
-            raise ExitWithStatusError(self._active_message(), ActiveStatus)
+            self._raise_pebble_check_failure(event.info.name)
 
         if isinstance(event, InstallEvent):
             self.unit.add_secret(
@@ -251,67 +234,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             raise ExitWithoutStatusChange()
         if not self._peer_relation_ready() and (isinstance(event, PebbleReadyEvent) or relation_name == "database"):
             raise ExitWithoutStatusChange()
-
-    def _check_update_status(self, container):
-        """Check whether update-status has anything to reconcile.
-
-        Args:
-            container: application container
-
-        Raises:
-            ExitWithStatusError: If the configuration is not valid.
-            ExitWithoutStatusChange: If the unit is up to date, or reports a failing check.
-        """
-        try:
-            self._validate()
-            if self.config.get("environment"):
-                self.create_env()
-        except ValueError as err:
-            raise ExitWithStatusError(str(err), BlockedStatus) from err
-
-        if not self._validate_pebble_plan(container):
-            return
-
-        if self._database_connection_changed(container):
-            logger.info("updating charm to reflect new database connection info")
-            return
-
-        if isinstance(self.unit.status, ActiveStatus) or self._has_failing_pebble_checks(container):
-            # Either there is nothing to recover from, or a failing pebble check (crash or eviction loop) keeps the
-            # unit Blocked until the check recovers.
-            raise ExitWithoutStatusChange()
-
-        # Configuration, secrets and the pebble plan are valid and no check is failing, so any other status is stale
-        # (e.g. left behind by a transient failure to read a Juju secret). Nothing else would clear it until
-        # the next config-changed, so reconcile now.
-        logger.info(f"unit status {self.unit.status!r} is stale, reconciling")
-
-    def _database_connection_changed(self, container) -> bool:
-        """Check whether the planned database connection differs from the one the relation provides.
-
-        Args:
-            container: application container
-
-        Returns:
-            True if the workload has to be reconfigured to use the database connection info of the relation.
-        """
-        db_conn = self.postgresql.connection()
-        if db_conn is None:
-            return False
-
-        try:
-            service = container.get_plan().services.get(self._service_name)
-        except pebble.ConnectionError:
-            return False
-        planned_env = service.environment if service else {}
-
-        planned = {
-            "host": planned_env.get("TEMPORAL_DB_HOST"),
-            "user": planned_env.get("TEMPORAL_DB_USER"),
-            "password": planned_env.get("TEMPORAL_DB_PASSWORD"),
-            "tls": planned_env.get("TEMPORAL_DB_TLS"),
-        }
-        return any((value or "") != (db_conn[field] or "") for field, value in planned.items())
 
     def _peer_relation_ready(self) -> bool:
         """Report whether the peer relation is available."""
@@ -419,20 +341,41 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         """
         return any(info.status == pebble.CheckStatus.DOWN for info in container.get_checks().values())
 
-    def _validate_pebble_plan(self, container):
-        """Validate Temporal worker pebble plan.
+    def _check_failing_pebble_checks(self, container):
+        """Keep the unit blocked while any Pebble check is down.
 
         Args:
-            container: application container
-
-        Returns:
-            bool of pebble plan validity
+            container: Application container.
         """
-        try:
-            plan = container.get_plan().to_dict()
-            return bool(plan and plan["services"].get(self._service_name, {}))
-        except pebble.ConnectionError:
-            return False
+        if not self._has_failing_pebble_checks(container):
+            return
+
+        checks = container.get_checks()
+        if any(
+            info.name == "eviction-loop-check" and info.status == pebble.CheckStatus.DOWN for info in checks.values()
+        ):
+            self._raise_pebble_check_failure("eviction-loop-check")
+
+        self._raise_pebble_check_failure("start-worker-check")
+
+    @staticmethod
+    def _raise_pebble_check_failure(check_name):
+        """Raise the blocked status for a failed Pebble check.
+
+        Args:
+            check_name: Name of the failed check.
+
+        Raises:
+            ExitWithStatusError: With the failed check's Blocked status.
+        """
+        if check_name == "eviction-loop-check":
+            logger.error(
+                "Temporal SDK workflow eviction loop detected: the worker has stuck slots "
+                "and may not complete workflow tasks. "
+                "Fix the workflow code before restarting the worker."
+            )
+            raise ExitWithStatusError("eviction loop detected - fix workflow code before restarting", BlockedStatus)
+        raise ExitWithStatusError("temporal-worker service is not running; check logs for crash details", BlockedStatus)
 
     def get_auth_config_from_juju_secret(self) -> dict:
         """Get auth config from Juju secret.
