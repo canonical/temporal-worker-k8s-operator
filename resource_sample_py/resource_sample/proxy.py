@@ -11,20 +11,15 @@ from urllib.request import proxy_bypass_environment  # type: ignore[attr-defined
 from temporallib.client import ProxyOptions
 
 
-def _environment(name: str) -> str:
-    return os.environ.get(name, os.environ.get(name.lower(), "")).strip()
-
-
 def proxy_options(host: Optional[str], tls: bool = False) -> ProxyOptions:
     """Select a proxy from the environment, respecting destination bypasses."""
     direct = ProxyOptions(host=None, username=None, password=None)
-    no_proxy = _environment("NO_PROXY")
+    no_proxy = os.environ.get("NO_PROXY", os.environ.get("no_proxy", "")).strip()
     if host and proxy_bypass_environment(host, {"no": no_proxy}):
         return direct
 
-    proxy = _environment("HTTPS_PROXY") if tls else _environment("HTTP_PROXY")
-    if tls and not proxy:
-        proxy = _environment("HTTP_PROXY")
+    name = "HTTPS_PROXY" if tls else "HTTP_PROXY"
+    proxy = os.environ.get(name, os.environ.get(name.lower(), "")).strip()
     if not proxy:
         return direct
 

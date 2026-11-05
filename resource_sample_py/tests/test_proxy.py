@@ -42,7 +42,6 @@ def test_no_proxy_defaults_to_direct(monkeypatch):
     [
         (False, "http://secure-proxy:8080", "plain-proxy:3128"),
         (True, "http://secure-proxy:8080", "secure-proxy:8080"),
-        (True, "", "plain-proxy:3128"),
     ],
 )
 def test_proxy_selection(monkeypatch, tls, https, expected):
@@ -54,6 +53,15 @@ def test_proxy_selection(monkeypatch, tls, https, expected):
 def test_https_proxy_not_used_for_plaintext(monkeypatch):
     monkeypatch.setenv("HTTPS_PROXY", "http://secure-proxy:8080")
     assert config() is None
+
+
+@pytest.mark.parametrize("https", [None, "", "   "])
+def test_http_proxy_not_used_for_tls(monkeypatch, https):
+    monkeypatch.setenv("HTTP_PROXY", "http://plain-proxy:3128")
+    monkeypatch.setenv("http_proxy", "http://lower-proxy:3128")
+    if https is not None:
+        monkeypatch.setenv("HTTPS_PROXY", https)
+    assert config(tls=True) is None
 
 
 @pytest.mark.parametrize(
