@@ -75,9 +75,9 @@ def test_http_proxy_not_used_for_tls(monkeypatch, https):
         ("http://user@proxy", "proxy:80", ("user", "")),
         ("http://user:@proxy", "proxy:80", ("user", "")),
         (
-            "http://u%40ser:p%3Aa%2Fss@proxy:3128",
+            "http://user%40example:p%3Aa%2Fss@proxy:3128",
             "proxy:3128",
-            ("u@ser", "p:a/ss"),
+            ("user@example", "p:a/ss"),
         ),
     ],
 )
