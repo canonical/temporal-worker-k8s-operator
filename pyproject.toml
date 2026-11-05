@@ -90,6 +90,7 @@ show_missing = true
 
 [tool.pytest.ini_options]
 minversion = "6.0"
+testpaths = ["tests"]
 log_cli_level = "INFO"
 
 # Formatting tools configuration
