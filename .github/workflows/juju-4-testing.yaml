@@ -1,26 +1,30 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-# Nightly integration tests against Juju 4.x via the team's shared reusable
+# Weekly integration tests against Juju 4.x via the team's shared reusable
 # workflow. Each test command gets its own runner provisioned by concierge.
-# Scheduled failures open/update one issue labelled `juju-4`.
+# Scheduled failures open/update one issue labelled `juju-4` and `bug`.
 
-name: Juju 4.x Tests
+name: juju-4-testing
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
 
 on:
   schedule:
-    # Run at 03:47 UTC every day
-    - cron: '47 3 * * *'
+    # Run at 04:47 UTC every Monday
+    - cron: '47 4 * * 1'
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   issues: write
 
 jobs:
   integration:
     name: Integration tests [juju 4.x]
-    uses: canonical/workflows-team/.github/workflows/juju-nightly.yaml@main
+    uses: canonical/workflows-team/.github/workflows/juju-testing.yaml@main
     with:
       juju-channel: "4.1/edge"
       # Matches the runner label used by tests.yaml ([self-hosted, linux, X64,
@@ -54,4 +58,4 @@ jobs:
         "just integration tests/integration/test_scaling.py --juju-dump-logs=diagnostics",
         "just integration tests/integration/test_vault.py --juju-dump-logs=diagnostics",
         "just integration tests/integration/test_worker_info.py --juju-dump-logs=diagnostics"]
-      issue-label: juju-4
+      issue-labels: juju-4,bug
