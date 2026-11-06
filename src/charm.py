@@ -318,7 +318,11 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         self.unit.status = MaintenanceStatus("restarting worker")
         container.restart(self._service_name)
-        self._set_active_status()
+        self._reconcile(event)
+
+        if not isinstance(self.unit.status, ActiveStatus):
+            event.fail(self.unit.status.message)
+            return
 
         event.set_results({"result": "worker successfully restarted"})
 

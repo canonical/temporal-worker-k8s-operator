@@ -765,7 +765,30 @@ def test_restart_action_restores_active_immediately(context, state, temporal_wor
 
     state_out = context.run(context.on.action("restart"), state_out)
 
+    assert context.action_results == {"result": "worker successfully restarted"}
     assert state_out.unit_status == ops.ActiveStatus(f"worker listening to namespace {namespace!r} on queue {queue!r}")
+
+
+def test_restart_action_fails_when_pebble_check_is_down(context, state, temporal_worker_container):
+    state_out = context.run(context.on.pebble_ready(temporal_worker_container), state)
+    state_out = context.run(context.on.config_changed(), state_out)
+
+    check_info = ops.testing.CheckInfo(
+        name="start-worker-check",
+        level=ops.pebble.CheckLevel.UNSET,
+        startup=ops.pebble.CheckStartup.UNSET,
+        status=ops.pebble.CheckStatus.DOWN,
+        failures=3,
+        threshold=3,
+    )
+    container = dataclasses.replace(state_out.get_container("temporal-worker"), check_infos=frozenset([check_info]))
+    state_out = dataclasses.replace(state_out, containers={container})
+
+    with pytest.raises(
+        ops.testing.ActionFailed,
+        match="temporal-worker service is not running; check logs for crash details",
+    ):
+        context.run(context.on.action("restart"), state_out)
 
 
 def test_update_status_restores_active_after_restart_action(
