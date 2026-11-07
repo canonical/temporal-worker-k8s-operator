@@ -11,6 +11,7 @@ import logging
 from activities.activity1 import compose_greeting
 from activities.activity2 import vault_test
 from activities.db_activity import database_test
+from proxy import proxy_options
 from temporallib.client import Client, Options
 from temporallib.encryption import EncryptionOptions
 from temporallib.worker import SentryOptions, Worker, WorkerOptions
@@ -21,8 +22,10 @@ logger = logging.getLogger(__name__)
 
 async def run_worker():
     """Connect Temporal worker to Temporal server."""
+    options = Options(encryption=EncryptionOptions())
+    options.proxy = proxy_options(options.host, tls=bool(options.tls_root_cas))
     client = await Client.connect(
-        client_opt=Options(encryption=EncryptionOptions()),
+        client_opt=options,
     )
 
     worker = Worker(
