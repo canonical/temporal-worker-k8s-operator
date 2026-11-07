@@ -50,7 +50,7 @@ class VaultActions(framework.Object):
 
         try:
             vault_client.write_secret(path=path, key=key, value=value)
-            self.charm._update(event)
+            self.charm._reconcile(event)
         except ValueError as e:
             logger.error("Unable to create secret in vault: %s", str(e))
             event.fail(str(e))

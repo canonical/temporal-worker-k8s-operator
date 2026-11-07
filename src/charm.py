@@ -20,7 +20,17 @@ from charms.temporal_worker_k8s.v0.temporal_worker_info import (
     TemporalWorkerInfoProvider,
 )
 from charms.vault_k8s.v0 import vault_kv
-from ops import main, pebble
+from ops import (
+    ConfigChangedEvent,
+    InstallEvent,
+    PebbleCheckFailedEvent,
+    PebbleReadyEvent,
+    RelationChangedEvent,
+    RelationEvent,
+    RelationJoinedEvent,
+    main,
+    pebble,
+)
 from ops.charm import CharmBase
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 
@@ -37,10 +47,39 @@ from literals import (
 from log import log_event_handler
 from relations.postgresql import Postgresql
 from relations.vault import VAULT_NONCE_SECRET_LABEL, VaultRelation
-from state import State
 from vault.actions import VaultActions
 
 logger = logging.getLogger(__name__)
+
+
+class ExitWithStatusError(Exception):
+    """Exception raised to exit the reconciliation with a specific unit status.
+
+    Attrs:
+        msg: The status message.
+        status_type: The ops status class to report.
+        status: The Juju unit status represented by this exception.
+    """
+
+    def __init__(self, msg: str, status_type):
+        """Construct.
+
+        Args:
+            msg: The status message.
+            status_type: The ops status class to report.
+        """
+        super().__init__(str(msg))
+        self.msg = str(msg)
+        self.status_type = status_type
+
+    @property
+    def status(self):
+        """Return the Juju unit status represented by this exception."""
+        return self.status_type(self.msg)
+
+
+class ExitWithoutStatusChange(Exception):  # noqa: N818
+    """Exception raised to exit the reconciliation leaving the unit status as it is."""
 
 
 class TemporalWorkerK8SOperatorCharm(CharmBase):
@@ -53,7 +92,6 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             args: Ignore.
         """
         super().__init__(*args)
-        self._state = State(self.app, lambda: self.model.get_relation("peer"))
         self._service_name = "temporal-worker"
 
         self.database = DatabaseRequires(
@@ -61,15 +99,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         )
         self.postgresql = Postgresql(self)
 
-        self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.framework.observe(self.on.temporal_worker_pebble_ready, self._on_temporal_worker_pebble_ready)
         self.framework.observe(self.on.restart_action, self._on_restart)
-        self.framework.observe(self.on.update_status, self._on_update_status)
-        self.framework.observe(self.on.install, self._on_install)
-        self.framework.observe(self.on.temporal_worker_pebble_check_failed, self._on_pebble_check_failed)
-        self.framework.observe(self.on.temporal_worker_pebble_check_recovered, self._on_pebble_check_recovered)
-        self.framework.observe(self.on.secret_changed, self._on_secret_changed)
-        self.framework.observe(self.on.peer_relation_changed, self._on_peer_relation_changed)
 
         # Vault
         self.vault = vault_kv.VaultKvRequires(
@@ -97,8 +127,30 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         self.worker_info = TemporalWorkerInfoProvider(self)
         self.host_info = TemporalHostInfoRequirer(self)
-        self.framework.observe(self.host_info.on.temporal_host_info_changed, self._update)
-        self.framework.observe(self.host_info.on.temporal_host_info_unavailable, self._update)
+
+        # Every event the charm reacts to converges on the single reconciler. The vault and host-info library events
+        # are only emitted once the relation data is usable, which is why they are observed instead of the relation
+        # events.
+        for event in [
+            self.on.install,
+            self.on.upgrade_charm,
+            self.on.config_changed,
+            self.on.update_status,
+            self.on.temporal_worker_pebble_ready,
+            self.on.temporal_worker_pebble_check_failed,
+            self.on.temporal_worker_pebble_check_recovered,
+            self.on.secret_changed,
+            self.on.peer_relation_changed,
+            self.database.on.database_created,
+            self.database.on.endpoints_changed,
+            self.on.database_relation_broken,
+            self.on.vault_relation_joined,
+            self.vault.on.ready,
+            self.vault.on.gone_away,
+            self.host_info.on.temporal_host_info_changed,
+            self.host_info.on.temporal_host_info_unavailable,
+        ]:
+            self.framework.observe(event, self._reconcile)
 
     @property
     def _deprecated_host(self) -> str | None:
@@ -110,30 +162,147 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         return stripped or None
 
     @log_event_handler(logger)
-    def _on_install(self, event):
-        """Handle on install event.
+    def _reconcile(self, event):
+        """Reconcile the charm towards the desired state; idempotent for every event.
 
         Args:
-            event: The event triggered on install.
+            event: The event that triggered the reconciliation.
         """
-        self.unit.add_secret(
-            {"nonce": secrets.token_hex(16)},
-            label=VAULT_NONCE_SECRET_LABEL,
-            description="Nonce for vault-kv relation",
-        )
+        try:
+            self._handle_unit_event(event)
+            self._ignore_event(event)
 
-    @log_event_handler(logger)
-    def _on_temporal_worker_pebble_ready(self, event):
-        """Define and start temporal using the Pebble API.
+            if isinstance(event, ConfigChangedEvent) or self._is_vault_joined(event):
+                self.vault_relation.update_vault_relation()
+            self.postgresql.sync_legacy_peer_state(event)
+            if self._is_vault_joined(event):
+                raise ExitWithoutStatusChange()
 
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        if not self._state.is_ready():
-            event.defer()
+            container = self.unit.get_container(self._service_name)
+            self._check_container_can_connect(container)
+            self._check_entrypoint(container)
+            charm_config_env, auth_config = self._check_configuration()
+            db_conn = self._check_database_connection()
+            context = self._build_context(charm_config_env, auth_config, db_conn)
+            self._apply_layer(container, context)
+            self._check_failing_pebble_checks(container)
+        except ExitWithoutStatusChange:
+            return
+        except ExitWithStatusError as e:
+            self.unit.status = e.status
             return
 
-        self._update(event)
+        self._set_active_status()
+
+    @staticmethod
+    def _is_vault_joined(event) -> bool:
+        """Report whether the event is a unit joining the vault relation."""
+        return isinstance(event, RelationJoinedEvent) and event.relation.name == "vault"
+
+    def _handle_unit_event(self, event):
+        """Handle the events that only report on, or prepare, the unit and never reconfigure the workload.
+
+        Args:
+            event: The event being reconciled.
+
+        Raises:
+            ExitWithoutStatusChange: If the event is fully handled.
+        """
+        if isinstance(event, PebbleCheckFailedEvent):
+            self._raise_pebble_check_failure(event.info.name)
+
+        if isinstance(event, InstallEvent):
+            self.unit.add_secret(
+                {"nonce": secrets.token_hex(16)},
+                label=VAULT_NONCE_SECRET_LABEL,
+                description="Nonce for vault-kv relation",
+            )
+            raise ExitWithoutStatusChange()
+
+    def _ignore_event(self, event):
+        """Ignore the events there is nothing to reconcile for on this unit.
+
+        Args:
+            event: The event being reconciled.
+
+        Raises:
+            ExitWithoutStatusChange: If the event is ignored.
+        """
+        relation_name = event.relation.name if isinstance(event, RelationEvent) else None
+        if isinstance(event, RelationChangedEvent) and relation_name == "peer" and self.unit.is_leader():
+            # The leader is the one writing to the peer relation.
+            raise ExitWithoutStatusChange()
+        if not self._peer_relation_ready() and (isinstance(event, PebbleReadyEvent) or relation_name == "database"):
+            raise ExitWithoutStatusChange()
+
+    def _peer_relation_ready(self) -> bool:
+        """Report whether the peer relation is available."""
+        return bool(self.model.get_relation("peer"))
+
+    def _check_container_can_connect(self, container):
+        """Check that the workload container can be reached.
+
+        Args:
+            container: application container
+
+        Raises:
+            ExitWithStatusError: If the workload container cannot be reached.
+        """
+        if not container.can_connect():
+            raise ExitWithStatusError("waiting for pebble api", WaitingStatus)
+
+    def _check_entrypoint(self, container):
+        """Check that the workload image has the expected entrypoint script.
+
+        Args:
+            container: application container
+
+        Raises:
+            ExitWithStatusError: If the entrypoint script does not exist.
+        """
+        if not container.exists("/app/scripts/start-worker.sh"):
+            logger.error(
+                "The workload container does not have the expected entrypoint script. Please refresh the charm with another valid image"
+            )
+            raise ExitWithStatusError("Please refresh the charm with a valid worker image", BlockedStatus)
+
+    def _check_configuration(self) -> tuple[dict, dict]:
+        """Validate the configuration and read the environment and the auth configuration.
+
+        Returns:
+            The environment configuration variables and the auth configuration variables.
+
+        Raises:
+            ExitWithStatusError: If the configuration is not valid.
+        """
+        charm_config_env = {}
+        auth_config = {}
+        try:
+            self._validate()
+            if self.config.get("environment"):
+                charm_config_env = self.create_env()
+            if self.config.get("auth-secret-id"):
+                auth_config = self.get_auth_config_from_juju_secret()
+        except ValueError as err:
+            raise ExitWithStatusError(str(err), BlockedStatus) from err
+        return charm_config_env, auth_config
+
+    def _check_database_connection(self) -> dict | None:
+        """Read the database connection info, if the charm is related to a database.
+
+        Returns:
+            The database connection info, or None if there is no database relation.
+
+        Raises:
+            ExitWithStatusError: If the database relation does not provide the connection info yet.
+        """
+        if not self.model.get_relation("database"):
+            return None
+
+        db_conn = self.postgresql.connection()
+        if not db_conn:
+            raise ExitWithStatusError("waiting for database credentials", WaitingStatus)
+        return db_conn
 
     @log_event_handler(logger)
     def _on_restart(self, event):
@@ -149,99 +318,21 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         self.unit.status = MaintenanceStatus("restarting worker")
         container.restart(self._service_name)
-        self._set_active_status()
+        self._reconcile(event)
+
+        if not isinstance(self.unit.status, ActiveStatus):
+            event.fail(self.unit.status.message)
+            return
 
         event.set_results({"result": "worker successfully restarted"})
 
-    @log_event_handler(logger)
-    def _on_config_changed(self, event):
-        """Handle configuration changes.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        self.unit.status = WaitingStatus("configuring temporal worker")
-        self._update(event)
-
-    @log_event_handler(logger)
-    def _on_secret_changed(self, event):
-        """Handle secret changed hook.
-
-        Args:
-            event: The event triggered when the secret changed.
-        """
-        self._update(event)
-
-    @log_event_handler(logger)
-    def _on_update_status(self, event):
-        """Handle `update-status` events.
-
-        Args:
-            event: The `update-status` event triggered at intervals.
-        """
-        should_update = self.postgresql.update_db_relation_data_in_state(event)
-        if should_update:
-            logger.info("updating charm to reflect new database connection info")
-            self._update(event)
-            return
-
-        try:
-            self._validate(event)
-            environment_config = self.config.get("environment")
-            if environment_config:
-                self.create_env()
-        except ValueError as err:
-            self.unit.status = BlockedStatus(str(err))
-            return
-
-        container = self.unit.get_container(self._service_name)
-        valid_pebble_plan = self._validate_pebble_plan(container)
-        if not valid_pebble_plan:
-            self._update(event)
-            return
-
-        if isinstance(self.unit.status, ActiveStatus) or self._has_failing_pebble_checks(container):
-            # Either there is nothing to recover from, or a failing pebble check (crash or eviction loop) keeps the
-            # unit Blocked until `_on_pebble_check_recovered` runs.
-            return
-
-        # Configuration, secrets and the pebble plan are valid and no check is failing, so any other status is stale
-        # (e.g. left behind by a transient failure to read a Juju secret). Nothing else would clear it until
-        # the next config-changed, so reconcile now.
-        logger.info(f"unit status {self.unit.status!r} is stale, reconciling")
-        self._update(event)
-
-    @log_event_handler(logger)
-    def _on_pebble_check_failed(self, event):
-        """Handle pebble check failed event.
-
-        Args:
-            event: The event triggered when the pebble check fails.
-        """
-        if event.info.name == "eviction-loop-check":
-            logger.error(
-                "Temporal SDK workflow eviction loop detected: the worker has stuck slots "
-                "and may not complete workflow tasks. "
-                "Fix the workflow code before restarting the worker."
-            )
-            self.unit.status = BlockedStatus("eviction loop detected - fix workflow code before restarting")
-        else:
-            self.unit.status = BlockedStatus("temporal-worker service is not running; check logs for crash details")
-
-    @log_event_handler(logger)
-    def _on_pebble_check_recovered(self, event):
-        """Handle pebble check recovered event.
-
-        Args:
-            event: The event triggered when the pebble check recovers.
-        """
-        self._set_active_status()
+    def _active_message(self) -> str:
+        """Return the message of the Active status: the configured namespace and queue."""
+        return f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
 
     def _set_active_status(self):
         """Set Active status with the configured namespace and queue."""
-        self.unit.status = ActiveStatus(
-            f"worker listening to namespace {self.config['namespace']!r} on queue {self.config['queue']!r}"
-        )
+        self.unit.status = ActiveStatus(self._active_message())
 
     def _has_failing_pebble_checks(self, container):
         """Check whether any pebble check of the container is currently failing.
@@ -254,20 +345,41 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         """
         return any(info.status == pebble.CheckStatus.DOWN for info in container.get_checks().values())
 
-    def _validate_pebble_plan(self, container):
-        """Validate Temporal worker pebble plan.
+    def _check_failing_pebble_checks(self, container):
+        """Keep the unit blocked while any Pebble check is down.
 
         Args:
-            container: application container
-
-        Returns:
-            bool of pebble plan validity
+            container: Application container.
         """
-        try:
-            plan = container.get_plan().to_dict()
-            return bool(plan and plan["services"].get(self._service_name, {}))
-        except pebble.ConnectionError:
-            return False
+        if not self._has_failing_pebble_checks(container):
+            return
+
+        checks = container.get_checks()
+        if any(
+            info.name == "eviction-loop-check" and info.status == pebble.CheckStatus.DOWN for info in checks.values()
+        ):
+            self._raise_pebble_check_failure("eviction-loop-check")
+
+        self._raise_pebble_check_failure("start-worker-check")
+
+    @staticmethod
+    def _raise_pebble_check_failure(check_name):
+        """Raise the blocked status for a failed Pebble check.
+
+        Args:
+            check_name: Name of the failed check.
+
+        Raises:
+            ExitWithStatusError: With the failed check's Blocked status.
+        """
+        if check_name == "eviction-loop-check":
+            logger.error(
+                "Temporal SDK workflow eviction loop detected: the worker has stuck slots "
+                "and may not complete workflow tasks. "
+                "Fix the workflow code before restarting the worker."
+            )
+            raise ExitWithStatusError("eviction loop detected - fix workflow code before restarting", BlockedStatus)
+        raise ExitWithStatusError("temporal-worker service is not running; check logs for crash details", BlockedStatus)
 
     def get_auth_config_from_juju_secret(self) -> dict:
         """Get auth config from Juju secret.
@@ -340,11 +452,8 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             if not config_object.get(param):
                 raise ValueError(f"Invalid config: {param} value missing")
 
-    def _validate(self, event):  # noqa: C901
+    def _validate(self):  # noqa: C901
         """Validate that configuration and relations are valid and ready.
-
-        Args:
-            event: The event triggered when the relation changed.
 
         Raises:
             ValueError: in case of invalid configuration.
@@ -353,7 +462,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if log_level not in VALID_LOG_LEVELS:
             raise ValueError(f"config: invalid log level {log_level!r}")
 
-        if not self._state.is_ready():
+        if not self._peer_relation_ready():
             raise ValueError("peer relation not ready")
 
         self._check_required_config(self.config, REQUIRED_CHARM_CONFIG)
@@ -381,56 +490,23 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if self.model.get_relation("database") and not self.config.get("db-name"):
             raise ValueError("Invalid config: db name value missing")
 
-    def _on_peer_relation_changed(self, event):
-        """Handle peer relation changes so non-leader units pick up leader-written state.
+    def _build_context(self, charm_config_env: dict, auth_config: dict, db_conn: dict | None) -> dict:  # noqa: C901
+        """Build the environment of the Temporal worker.
 
         Args:
-            event: The peer relation changed event.
+            charm_config_env: Variables coming from the `environment` config.
+            auth_config: Variables coming from the auth Juju secret.
+            db_conn: Connection info of the related database, if any.
+
+        Returns:
+            The environment of the Temporal worker service.
+
+        Raises:
+            ExitWithStatusError: If the worker cannot be configured to reach Temporal.
         """
-        # The leader writes the peer data itself and already runs `_update` when the database
-        # relation changes, so only non-leader units need to react to its changes.
-        if self.unit.is_leader():
-            return
-        self._update(event)
-
-    def _update(self, event):  # noqa: C901
-        """Update the Temporal worker configuration and replan its execution.
-
-        Args:
-            event: The event triggered when the relation changed.
-        """
-        container = self.unit.get_container(self._service_name)
-        if not container.can_connect():
-            event.defer()
-            self.unit.status = WaitingStatus("waiting for pebble api")
-            return
-
-        if not container.exists("/app/scripts/start-worker.sh"):
-            logger.error(
-                "The workload container does not have the expected entrypoint script. Please refresh the charm with another valid image"
-            )
-            self.unit.status = BlockedStatus("Please refresh the charm with a valid worker image")
-            return
-
-        context = {}
-        auth_config = {}
-        charm_config_env = {}
-        try:
-            self._validate(event)
-            if self.config.get("environment"):
-                charm_config_env = self.create_env()
-            if self.config.get("auth-secret-id"):
-                auth_config = self.get_auth_config_from_juju_secret()
-        except ValueError as err:
-            self.unit.status = BlockedStatus(str(err))
-            return
-
-        if self.model.get_relation("database") and not self._state.database_connection:
-            self.unit.status = WaitingStatus("waiting for database credentials")
-            return
-
         logger.info("Configuring Temporal worker")
 
+        context: dict = {}
         proxy_vars = {
             "HTTP_PROXY": "JUJU_CHARM_HTTP_PROXY",
             "HTTPS_PROXY": "JUJU_CHARM_HTTPS_PROXY",
@@ -458,10 +534,10 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             )
             host = self._deprecated_host
         else:
-            self.unit.status = BlockedStatus(
-                "temporal-host-info relation not established; set deprecated `host` config as fallback"
+            raise ExitWithStatusError(
+                "temporal-host-info relation not established; set deprecated `host` config as fallback",
+                BlockedStatus,
             )
-            return
 
         context.update(
             {
@@ -504,8 +580,7 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
         if host_from_relation:
             tls_root_cas = context.get("TEMPORAL_TLS_ROOT_CAS") or context.get("TWC_TLS_ROOT_CAS")
             if self.host_info.tls and not tls_root_cas:
-                self.unit.status = BlockedStatus("Temporal frontend uses TLS: set tls-root-cas to its CA")
-                return
+                raise ExitWithStatusError("Temporal frontend uses TLS: set tls-root-cas to its CA", BlockedStatus)
             if not self.host_info.tls and tls_root_cas:
                 logger.warning(
                     "tls-root-cas is set but the Temporal frontend does not serve TLS: the worker dials "
@@ -514,17 +589,29 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
 
         context.update({"TWC_PROMETHEUS_PORT": PROMETHEUS_PORT, "TEMPORAL_PROMETHEUS_PORT": PROMETHEUS_PORT})
 
-        if self.model.get_relation("database") and self._state.database_connection:
+        if db_conn:
             context.update(
                 {
-                    "TEMPORAL_DB_HOST": self._state.database_connection.get("host"),
-                    "TEMPORAL_DB_PORT": self._state.database_connection.get("port"),
-                    "TEMPORAL_DB_PASSWORD": self._state.database_connection.get("password"),
-                    "TEMPORAL_DB_USER": self._state.database_connection.get("user"),
-                    "TEMPORAL_DB_TLS": self._state.database_connection.get("tls"),
+                    "TEMPORAL_DB_HOST": db_conn.get("host"),
+                    "TEMPORAL_DB_PORT": db_conn.get("port"),
+                    "TEMPORAL_DB_PASSWORD": db_conn.get("password"),
+                    "TEMPORAL_DB_USER": db_conn.get("user"),
+                    "TEMPORAL_DB_TLS": db_conn.get("tls"),
                 }
             )
 
+        return context
+
+    def _apply_layer(self, container, context):
+        """Add the Pebble layer and replan when the plan changed or the worker is not running.
+
+        Args:
+            container: application container
+            context: The environment of the Temporal worker service.
+
+        Raises:
+            ExitWithStatusError: If the worker cannot be started.
+        """
         pebble_layer = {
             "summary": "temporal worker layer",
             "services": {
@@ -554,18 +641,33 @@ class TemporalWorkerK8SOperatorCharm(CharmBase):
             },
         }
 
+        plan_before = container.get_plan().to_dict()
         container.add_layer(self._service_name, pebble_layer, combine=True)
+        plan_changed = container.get_plan().to_dict() != plan_before
+
+        # A previous replan may have failed to start the worker: retry it.
+        if not plan_changed and self._worker_running(container):
+            return
 
         try:
             container.replan()
         except pebble.ChangeError as e:
             logger.exception(f"Failed to replan pebble services: {e}")
-            self.unit.status = BlockedStatus(
-                "Failed to start pebble services - please consult logs for further details"
-            )
-            return
+            raise ExitWithStatusError(
+                "Failed to start pebble services - please consult logs for further details", BlockedStatus
+            ) from e
 
-        self._set_active_status()
+    def _worker_running(self, container) -> bool:
+        """Check whether the worker service is running.
+
+        Args:
+            container: application container
+
+        Returns:
+            True if the worker service is running.
+        """
+        service = container.get_services(self._service_name).get(self._service_name)
+        return service is not None and service.is_running()
 
 
 def convert_env_var(config_var, prefix="TWC_"):
