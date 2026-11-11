@@ -6,10 +6,10 @@
 
 import logging
 
+import jubilant
 import pytest
 from conftest import deploy  # noqa: F401, pylint: disable=W0611
 from helpers import run_sample_workflow
-from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class TestDeployment:
     """Integration tests for Temporal charm."""
 
-    async def test_basic_client(self, ops_test: OpsTest):
+    def test_basic_client(self, juju: jubilant.Juju):
         """Connects a client and runs a basic Temporal workflow."""
-        await run_sample_workflow(ops_test, use_env_variables=False)
-        await run_sample_workflow(ops_test, use_env_variables=True)
+        run_sample_workflow(juju, use_env_variables=False)
+        run_sample_workflow(juju, use_env_variables=True)

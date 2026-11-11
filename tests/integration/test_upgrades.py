@@ -2,63 +2,42 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Temporal worker charm scaling integration tests."""
+"""Temporal worker charm upgrade integration tests."""
 
 import logging
-from pathlib import Path
+import pathlib
 
+import jubilant
 import pytest
-import pytest_asyncio
 from helpers import (
     APP_NAME,
     APP_NAME_SERVER,
     BASE_WORKER_CONFIG,
     add_juju_secret,
+    fast_forward,
     get_worker_config,
     run_sample_workflow,
     setup_temporal_ecosystem,
+    wait_active,
+    wait_blocked,
 )
-from pytest import FixtureRequest
-from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
 
-@pytest_asyncio.fixture(scope="module", name="charm")
-async def charm_fixture(request: FixtureRequest, ops_test: OpsTest) -> str | Path:
-    """Fetch the path to charm."""
-    charms = request.config.getoption("--charm-file")
-    if not charms:
-        charm = await ops_test.build_charm(".")
-        assert charm, "Charm not built"
-        return charm
-    return charms[0]
-
-
-@pytest.mark.skip_if_deployed
-@pytest_asyncio.fixture(name="deploy", scope="module")
-async def deploy(ops_test: OpsTest):
+@pytest.fixture(name="deploy", scope="module")
+def deploy(juju: jubilant.Juju):
     """Verify the app is up and running."""
-    await setup_temporal_ecosystem(ops_test)
+    setup_temporal_ecosystem(juju)
 
     # Deploy Temporal worker charm from Charmhub store
-    await ops_test.model.deploy(APP_NAME, config=BASE_WORKER_CONFIG, channel="edge")
+    juju.deploy(APP_NAME, config=BASE_WORKER_CONFIG, channel="edge")
 
-    async with ops_test.fast_forward():
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME],
-            status="blocked",
-            raise_on_blocked=False,
-            timeout=600,
-        )
+    with fast_forward(juju):
+        wait_blocked(juju, APP_NAME, timeout=600)
 
-        await ops_test.model.applications[APP_NAME].set_config({"host": f"{APP_NAME_SERVER}:7233"})
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME],
-            status="active",
-            raise_on_blocked=False,
-            timeout=600,
-        )
+        juju.config(APP_NAME, {"host": f"{APP_NAME_SERVER}:7233"})
+        wait_active(juju, APP_NAME, timeout=600)
 
 
 @pytest.mark.abort_on_fail
@@ -66,29 +45,34 @@ async def deploy(ops_test: OpsTest):
 class TestUpgrade:
     """Integration upgrade tests for Temporal worker charm."""
 
-    async def test_upgrade(self, ops_test: OpsTest, charm: str):
-        """Builds the current charm and refreshes the current deployment."""
+    def test_upgrade(self, juju: jubilant.Juju, charm: pathlib.Path):
+        """Refresh the current deployment to the locally built charm."""
         logger.info("Refreshing Temporal worker charm from local build")
-        # Use CLI directly to support --base parameter for 22.04→24.04 platform upgrade
-        model_name = ops_test.model.name
-        retcode, stdout, stderr = await ops_test.juju(
-            "refresh",
+        juju.refresh(
             APP_NAME,
-            "--path",
-            str(charm),
-            "--base",
-            "ubuntu@24.04",
-            "-m",
-            model_name,
+            path=charm,
+            base="ubuntu@24.04",
         )
-        assert retcode == 0, f"Refresh failed: {stderr}"
-        secret_id = await add_juju_secret(ops_test)
+
+        # Wait for the refresh to actually land: refresh is asynchronous, and
+        # all_active alone can return while the old charm is still running or
+        # the upgrade-charm hook is pending. Locally refreshed charms report
+        # charm-origin "local" (charm-rev -1), replacing "charmhub".
+        juju.wait(
+            lambda status: status.apps[APP_NAME].charm_origin == "local"
+            and jubilant.all_active(status, APP_NAME)
+            and jubilant.all_agents_idle(status, APP_NAME),
+            timeout=600,
+        )
+
+        secret_id = add_juju_secret(juju)
         worker_config = get_worker_config(secret_id)
 
-        await ops_test.model.applications[APP_NAME].set_config(worker_config)
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME], status="active", raise_on_error=False, raise_on_blocked=False, timeout=600
-        )
-        assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
+        # Mirror the deploy fixture: the worker reads the secret by id from its
+        # environment config, which requires the secret to be granted to the app.
+        juju.grant_secret("worker-secrets", APP_NAME)
+        juju.config(APP_NAME, worker_config)
+        wait_active(juju, APP_NAME, timeout=600)
+        assert juju.status().apps[APP_NAME].units[f"{APP_NAME}/0"].is_active
 
-        await run_sample_workflow(ops_test)
+        run_sample_workflow(juju)
