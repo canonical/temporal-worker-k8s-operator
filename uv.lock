@@ -180,11 +180,11 @@ wheels = [
 
 [[package]]
 name = "codespell"
-version = "2.2.1"
+version = "2.4.3"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/71/66/d5e8b69e1572e0165be57fd980ef74394dcea0f49d810407eab2c46449ef/codespell-2.2.1.tar.gz", hash = "sha256:569b67e5e5c3ade02a1e23f6bbc56c64b608a3ab48ddd943ece0a03e6c346ed1", size = 208802, upload-time = "2022-08-18T13:53:23.891Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/80/19/45e941380f69c042b43423513d201e6592346f992394347f5e7174c31407/codespell-2.4.3.tar.gz", hash = "sha256:cbe085e331227b37bb86ef8bddd08dc768c704ee9a07ca869852c093fa2793e2", size = 352773, upload-time = "2026-07-15T11:51:54.159Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7d/ef/9f87a6b98129416b0415bfc0fd5333831f768f6f76b547883deb3e8c04c0/codespell-2.2.1-py3-none-any.whl", hash = "sha256:0c53a70f466952706407383d87142a78f319a0e18602802c4aadd3d93158bfc6", size = 202096, upload-time = "2022-08-18T13:53:21.968Z" },
+    { url = "https://files.pythonhosted.org/packages/8b/bf/bdb951d34eb169140b546f44be9ec4525d1acefb9eb5572071f5492b19fc/codespell-2.4.3-py3-none-any.whl", hash = "sha256:af2505b335e8573dbd2d384d1c4ef498f4006f4ba2d6fceca01e55b91f52628a", size = 340736, upload-time = "2026-07-15T11:51:52.925Z" },
 ]
 
 [[package]]
@@ -330,15 +330,15 @@ wheels = [
 
 [[package]]
 name = "flake8-docstrings"
-version = "1.6.0"
+version = "1.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "flake8" },
     { name = "pydocstyle" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c1/a6/b8a953fb256ee383fed9094f7270ab75cd637c23749c211f0e6b3552a31e/flake8-docstrings-1.6.0.tar.gz", hash = "sha256:9fe7c6a306064af8e62a055c2f61e9eb1da55f84bb39caef2b84ce53708ac34b", size = 6170, upload-time = "2021-03-19T00:57:13.626Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/93/24/f839e3a06e18f4643ccb81370909a497297909f15106e6af2fecdef46894/flake8_docstrings-1.7.0.tar.gz", hash = "sha256:4c8cc748dc16e6869728699e5d0d685da9a10b0ea718e090b1ba088e67a941af", size = 5995, upload-time = "2023-01-25T14:27:13.903Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8b/ad/35dc9b3585ddbab617679b97487450f873e582408843c07fe97f524463c2/flake8_docstrings-1.6.0-py2.py3-none-any.whl", hash = "sha256:99cac583d6c7e32dd28bbfbef120a7c0d1b6dde4adb5a9fd441c4227a6534bde", size = 5709, upload-time = "2021-03-19T00:57:12.12Z" },
+    { url = "https://files.pythonhosted.org/packages/3f/7d/76a278fa43250441ed9300c344f889c7fb1817080c8fb8996b840bf421c2/flake8_docstrings-1.7.0-py2.py3-none-any.whl", hash = "sha256:51f2344026da083fc084166a9353f5082b01f72901df422f74b4d953ae88ac75", size = 4994, upload-time = "2023-01-25T14:27:12.32Z" },
 ]
 
 [[package]]
@@ -381,14 +381,14 @@ wheels = [
 
 [[package]]
 name = "hvac"
-version = "2.3.0"
+version = "2.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/48/a4/c0b698a7250b7a5c2956427406560701862215c646e079a7907846608f44/hvac-2.3.0.tar.gz", hash = "sha256:1b85e3320e8642dd82f234db63253cda169a817589e823713dc5fca83119b1e2", size = 332660, upload-time = "2024-06-18T14:46:09.748Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e2/57/b46c397fb3842cfb02a44609aa834c887f38dd75f290c2fc5a34da4b2fee/hvac-2.4.0.tar.gz", hash = "sha256:e0056ad9064e7923e874e6769015b032580b639e29246f5ab1044f7959c1c7e0", size = 332543, upload-time = "2025-10-30T12:57:47.512Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0b/34/56facf52e2ea14ce640f434ccf00311af6f3a1df0019d4682ba28ea09948/hvac-2.3.0-py3-none-any.whl", hash = "sha256:a3afc5710760b6ee9b3571769df87a0333da45da05a5f9f963e1d3925a84be7d", size = 155860, upload-time = "2024-06-18T14:46:05.399Z" },
+    { url = "https://files.pythonhosted.org/packages/55/33/71e45a6bd6875f44a26f99da31c63b6840123e88bedf2c0b1ce429b8be12/hvac-2.4.0-py3-none-any.whl", hash = "sha256:008db5efd8c2f77bd37d2368ea5f713edceae1c65f11fd608393179478649e0f", size = 155921, upload-time = "2025-10-30T12:57:46.253Z" },
 ]
 
 [[package]]
@@ -423,16 +423,18 @@ wheels = [
 
 [[package]]
 name = "ipdb"
-version = "0.13.9"
+version = "0.13.13"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "decorator" },
     { name = "ipython", version = "8.37.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "ipython", version = "9.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "setuptools" },
-    { name = "toml" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fc/56/9f67dcd4a4b9960373173a31be1b8c47fe351a1c9385677a7bdd82810e57/ipdb-0.13.9.tar.gz", hash = "sha256:951bd9a64731c444fd907a5ce268543020086a697f6be08f7cc2c9a752a278c5", size = 16820, upload-time = "2021-06-02T11:43:46.396Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3d/1b/7e07e7b752017f7693a0f4d41c13e5ca29ce8cbcfdcc1fd6c4ad8c0a27a0/ipdb-0.13.13.tar.gz", hash = "sha256:e3ac6018ef05126d442af680aad863006ec19d02290561ac88b8b1c0b0cfc726", size = 17042, upload-time = "2023-03-09T15:40:57.487Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0c/4c/b075da0092003d9a55cf2ecc1cae9384a1ca4f650d51b00fc59875fe76f6/ipdb-0.13.13-py3-none-any.whl", hash = "sha256:45529994741c4ab6d2388bfa5d7b725c2cf7fe9deffabdb8a6113aa5ed449ed4", size = 12130, upload-time = "2023-03-09T15:40:55.021Z" },
+]
 
 [[package]]
 name = "ipython"
@@ -520,14 +522,14 @@ wheels = [
 
 [[package]]
 name = "jubilant"
-version = "1.14.0"
+version = "1.15.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1d/f1/f9d7581e6bea4ca89bb1c9aca3309629047f3bb0c49ddb0cabe33889d9fd/jubilant-1.14.0.tar.gz", hash = "sha256:d7fb046c716640ccd39c072dc1471de84cc54d78e331cc18d422ca7a5b72b378", size = 37181, upload-time = "2026-09-29T23:03:24.598Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/40/78/593575bdce4aa6a4db1a197937be9eea191d54d86e9ec67838f4c11af111/jubilant-1.15.0.tar.gz", hash = "sha256:5b7a6c4be94a859736822f7b3bb3e4a12da4c01e8c81fdb42f517d15e89d87dd", size = 37932, upload-time = "2026-11-20T01:58:51.406Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/23/d4/6effc16acb9fff30603c46270ab58f48c812ba1f567025f22ab5eb96c91a/jubilant-1.14.0-py3-none-any.whl", hash = "sha256:2a631fb2363cdd26c0dea52659b5a8946e36f57fec922895521ab59bda6398e8", size = 39483, upload-time = "2026-09-29T23:03:23.102Z" },
+    { url = "https://files.pythonhosted.org/packages/34/22/0ad8ad38f7630db84c8d8161c52ff9ade7af2b3726b471afa8d1fde94cd8/jubilant-1.15.0-py3-none-any.whl", hash = "sha256:59689b98a5960082d06941d6bd9f6842465481d9d6a78451842984de2d16a3a9", size = 40152, upload-time = "2026-11-20T01:58:50.273Z" },
 ]
 
 [[package]]
@@ -728,14 +730,14 @@ wheels = [
 
 [[package]]
 name = "pep8-naming"
-version = "0.13.2"
+version = "0.15.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "flake8" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/50/53/a8b7a6eb08be99920c86d0eebbecb2782141a36252a710aaa5cc920d6d20/pep8-naming-0.13.2.tar.gz", hash = "sha256:93eef62f525fd12a6f8c98f4dcc17fa70baae2f37fa1f73bec00e3e44392fa48", size = 16005, upload-time = "2022-08-19T19:24:24.503Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8d/59/c32862134635ba231d45f1711035550dc38246396c27269a4cde4bfe18d2/pep8_naming-0.15.1.tar.gz", hash = "sha256:f6f4a499aba2deeda93c1f26ccc02f3da32b035c8b2db9696b730ef2c9639d29", size = 17640, upload-time = "2025-05-05T20:43:12.555Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7d/e3/9d7afb48ad9366c8ae9821ba8049f9b2b856e84c3fcbc44338387b0f9497/pep8_naming-0.13.2-py3-none-any.whl", hash = "sha256:59e29e55c478db69cffbe14ab24b5bd2cd615c0413edf790d47d3fb7ba9a4e23", size = 8484, upload-time = "2022-08-19T19:24:22.9Z" },
+    { url = "https://files.pythonhosted.org/packages/a6/78/25281540f1121acaa78926f599a17ce102b8971bc20b096fa7fb6b5b59c1/pep8_naming-0.15.1-py3-none-any.whl", hash = "sha256:eb63925e7fd9e028c7f7ee7b1e413ec03d1ee5de0e627012102ee0222c273c86", size = 9561, upload-time = "2025-05-05T20:43:11.626Z" },
 ]
 
 [[package]]
@@ -1105,7 +1107,7 @@ wheels = [
 
 [[package]]
 name = "pytest-interface-tester"
-version = "3.3.1"
+version = "3.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ops-scenario" },
@@ -1113,22 +1115,22 @@ dependencies = [
     { name = "pytest" },
     { name = "typer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7f/e1/9ef461c4c0845b253b3bfb45ad36e3d9ad851e5baf9c2ac259310887676e/pytest_interface_tester-3.3.1.tar.gz", hash = "sha256:0bf4ca6404420fb23035e4dc46f16e8e619d279abd210d7c9ced2b40e89be14f", size = 27655, upload-time = "2025-02-13T09:21:46.546Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/58/ca/55ec97b38985e63c5f46ed65da4a1dcf76b9a7e67450e7fb7bd7110bbea5/pytest_interface_tester-3.4.1.tar.gz", hash = "sha256:95af07733981adf3891aeb4d0178582dd790ec78ee8dc23e1cd9498e3dea4200", size = 21474, upload-time = "2026-02-11T08:14:10.688Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/2d/846a7cd30d6802ab4f230443c967d48aa33b8a251e1d1815dd6ac8587183/pytest_interface_tester-3.3.1-py3-none-any.whl", hash = "sha256:385a8f9d111787d7ab80b90988d3411de31c12640701e3fa41b01a17b192477f", size = 21766, upload-time = "2025-02-13T09:21:45.508Z" },
+    { url = "https://files.pythonhosted.org/packages/d6/d1/7f909a9b530c92afc109ffb81a3c0b18de1724a763dfc14fae49fc417ca7/pytest_interface_tester-3.4.1-py3-none-any.whl", hash = "sha256:1d1f346d04d78c4f5a18ee8d7ac8d7f288e1b5f5feafa72dd543bbc7af5cb031", size = 22192, upload-time = "2026-02-11T08:14:09.35Z" },
 ]
 
 [[package]]
 name = "pytest-jubilant"
-version = "2.3.0"
+version = "2.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jubilant" },
     { name = "pytest" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ba/d7/e3f8f1a2d067e22e4a1e5df062190e226d8e787a4f5e5ec435253131c09b/pytest_jubilant-2.3.0.tar.gz", hash = "sha256:cc893b572f3a774c1f12b7bb03decd95f47f7949ac43e73d099ea9a24ed0b24d", size = 19097, upload-time = "2026-09-03T02:21:03.712Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/91/f9f1e4cc34f9b4fcde0b0a3faced98178eb04ce7db64bf9d0c1121ebdf5d/pytest_jubilant-2.3.1.tar.gz", hash = "sha256:cc34837c191dbf500db77a1c010fbb49ad712513252851e386b6de3487a38073", size = 19180, upload-time = "2026-11-13T01:36:05.805Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b1/9b/4f627e9c429577e06362ca94369ed99046c26f45342c78841f9e72bb53ff/pytest_jubilant-2.3.0-py3-none-any.whl", hash = "sha256:259547881d0a91f671fa042ec52ba2d9419c650e5ba5efa62d59fc83b888c984", size = 15218, upload-time = "2026-09-03T02:21:02.539Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/86/17ed460bb5b4572f3da7d1a8fc80da857cb06877f5a764440d84a1bb791b/pytest_jubilant-2.3.1-py3-none-any.whl", hash = "sha256:e8ce3aa4bafaf638c7e66ff44a9cba8b76802a5339003c70e7e14eb735e16bec", size = 15089, upload-time = "2026-11-13T01:36:04.698Z" },
 ]
 
 [[package]]
@@ -1292,7 +1294,7 @@ wheels = [
 
 [[package]]
 name = "temporal-lib-py"
-version = "1.4.3"
+version = "1.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "google-auth" },
@@ -1303,7 +1305,7 @@ dependencies = [
     { name = "temporalio" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/76/ed/e885339d94cd68d13eab620c36d66440dbc9ee54be73a3911cc53d27a613/temporal_lib_py-1.4.3-py3-none-any.whl", hash = "sha256:fb3b1ec8293a38aa8ff16dafb851118d898e56934ec0edbd67ca8ae94477416b", size = 15104, upload-time = "2024-10-03T09:41:50.551Z" },
+    { url = "https://files.pythonhosted.org/packages/cb/cb/8f9dfe34d740b98aa67c56d510d816a61e59d021830dffcfdda7ed582795/temporal_lib_py-1.10.0-py3-none-any.whl", hash = "sha256:9578f1347db53f95ea7c3b4e573ff5ac1374f96e55fff51c6a72369fa3a8f43d", size = 19025, upload-time = "2026-10-09T12:31:54.592Z" },
 ]
 
 [[package]]
@@ -1394,24 +1396,24 @@ unit = [
 requires-dist = [
     { name = "black", marker = "extra == 'fmt'", specifier = "==22.8.0" },
     { name = "black", marker = "extra == 'lint'", specifier = "==22.8.0" },
-    { name = "codespell", marker = "extra == 'lint'", specifier = "==2.2.1" },
+    { name = "codespell", marker = "extra == 'lint'", specifier = "==2.4.3" },
     { name = "cosl", marker = "extra == 'charm'", specifier = "==0.0.6" },
     { name = "cosl", marker = "extra == 'unit'", specifier = "==0.0.6" },
     { name = "coverage", extras = ["toml"], marker = "extra == 'unit'", specifier = "==6.4.4" },
     { name = "flake8", marker = "extra == 'lint'", specifier = "==7.0.0" },
     { name = "flake8-builtins", marker = "extra == 'lint'", specifier = "==1.5.3" },
     { name = "flake8-copyright", marker = "extra == 'lint'", specifier = "==0.2.4" },
-    { name = "flake8-docstrings", marker = "extra == 'lint'", specifier = "==1.6.0" },
+    { name = "flake8-docstrings", marker = "extra == 'lint'", specifier = "==1.7.0" },
     { name = "flake8-docstrings-complete", marker = "extra == 'lint'", specifier = ">=1.0.3" },
     { name = "flake8-test-docs", marker = "extra == 'lint'", specifier = ">=1.0" },
-    { name = "hvac", marker = "extra == 'charm'", specifier = "==2.3.0" },
-    { name = "hvac", marker = "extra == 'integration'", specifier = "==2.3.0" },
-    { name = "hvac", marker = "extra == 'unit'", specifier = "==2.3.0" },
-    { name = "ipdb", marker = "extra == 'integration'", specifier = "==0.13.9" },
-    { name = "ipdb", marker = "extra == 'unit'", specifier = "==0.13.9" },
+    { name = "hvac", marker = "extra == 'charm'", specifier = "==2.4.0" },
+    { name = "hvac", marker = "extra == 'integration'", specifier = "==2.4.0" },
+    { name = "hvac", marker = "extra == 'unit'", specifier = "==2.4.0" },
+    { name = "ipdb", marker = "extra == 'integration'", specifier = "==0.13.13" },
+    { name = "ipdb", marker = "extra == 'unit'", specifier = "==0.13.13" },
     { name = "isort", marker = "extra == 'fmt'", specifier = "==5.10.1" },
     { name = "isort", marker = "extra == 'lint'", specifier = "==5.10.1" },
-    { name = "jubilant", marker = "extra == 'integration'", specifier = ">=1.13,<2" },
+    { name = "jubilant", marker = "extra == 'integration'", specifier = ">=1.15.0,<2" },
     { name = "kubernetes", marker = "extra == 'integration'", specifier = ">=33.0.0,<36" },
     { name = "mypy", marker = "extra == 'lint'" },
     { name = "ops", marker = "extra == 'charm'", specifier = "==2.21.1" },
@@ -1420,18 +1422,18 @@ requires-dist = [
     { name = "ops", extras = ["testing"], marker = "extra == 'unit'", specifier = "==2.21.1" },
     { name = "ops-scenario", marker = "extra == 'integration'", specifier = "==7.21.1" },
     { name = "ops-scenario", marker = "extra == 'unit'", specifier = "==7.21.1" },
-    { name = "pep8-naming", marker = "extra == 'lint'", specifier = "==0.13.2" },
+    { name = "pep8-naming", marker = "extra == 'lint'", specifier = "==0.15.1" },
     { name = "pydocstyle", marker = "extra == 'lint'" },
     { name = "pylint", marker = "extra == 'lint'" },
     { name = "pyproject-flake8", marker = "extra == 'lint'", specifier = "==7.0.0" },
     { name = "pytest", marker = "extra == 'integration'", specifier = ">=9.1.1,<10" },
     { name = "pytest", marker = "extra == 'lint'" },
     { name = "pytest", marker = "extra == 'unit'", specifier = ">=9.1.1,<10" },
-    { name = "pytest-interface-tester", marker = "extra == 'charm'", specifier = "==3.3.1" },
-    { name = "pytest-interface-tester", marker = "extra == 'integration'", specifier = "==3.3.1" },
-    { name = "pytest-interface-tester", marker = "extra == 'unit'", specifier = "==3.3.1" },
-    { name = "pytest-jubilant", marker = "extra == 'integration'", specifier = ">=2,<3" },
-    { name = "temporal-lib-py", marker = "extra == 'integration'", specifier = "==1.4.3" },
+    { name = "pytest-interface-tester", marker = "extra == 'charm'", specifier = "==3.4.1" },
+    { name = "pytest-interface-tester", marker = "extra == 'integration'", specifier = "==3.4.1" },
+    { name = "pytest-interface-tester", marker = "extra == 'unit'", specifier = "==3.4.1" },
+    { name = "pytest-jubilant", marker = "extra == 'integration'", specifier = ">=2.3.1,<3" },
+    { name = "temporal-lib-py", marker = "extra == 'integration'", specifier = "==1.10.0" },
     { name = "temporal-worker-k8s-operator", extras = ["charm", "unit", "integration", "lint", "fmt"], marker = "extra == 'dev'" },
 ]
 provides-extras = ["charm", "unit", "integration", "lint", "fmt", "dev"]
@@ -1454,15 +1456,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/6d/76/82415b43c68e2c6bb3a85e8800555d206767815088c8cad0ade9a06bd7ac/temporalio-1.18.0-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:a023b25033e48b2e43f623a78737047a45b8cb553f69f457d09272fce5c723da", size = 12694061, upload-time = "2025-09-19T23:40:26.388Z" },
     { url = "https://files.pythonhosted.org/packages/41/60/176a3224c2739fee270052dd9224ae36370c4e13d2ab1bb96a2f9bbb513c/temporalio-1.18.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:695211dddbcffc20077d5b3b9a9b41bd09f60393c4ff211bcc7d6d895d607cc1", size = 12879404, upload-time = "2025-09-19T23:40:37.487Z" },
     { url = "https://files.pythonhosted.org/packages/e3/8d/e3809b356262d1d398d8cbb78df1e19d460c0a89e6ab64ca8d9c05d5fe5a/temporalio-1.18.0-cp39-abi3-win_amd64.whl", hash = "sha256:e3f691bd0a01a22c0fe40e87b6236cc8a292628e3a5a490880d1bf94709249c9", size = 13088041, upload-time = "2025-09-19T23:40:49.469Z" },
-]
-
-[[package]]
-name = "toml"
-version = "0.10.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/be/ba/1f744cdc819428fc6b5084ec34d9b30660f6f9daaf70eead706e3203ec3c/toml-0.10.2.tar.gz", hash = "sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f", size = 22253, upload-time = "2020-11-01T01:40:22.204Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/44/6f/7120676b6d73228c96e17f1f794d8ab046fc910d781c8d151120c3f1569e/toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b", size = 16588, upload-time = "2020-11-01T01:40:20.672Z" },
 ]
 
 [[package]]
