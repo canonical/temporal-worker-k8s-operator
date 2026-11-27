@@ -33,7 +33,7 @@ integration = [
     "ipdb==0.13.9",
     # Pin <36 to avoid v36.0.0 auth regression (https://github.com/kubernetes-client/python/issues/25844).
     # Remove upper bound once a patched release is available.
-    "kubernetes>=33.0.0,<36",
+    "kubernetes>=37.0.3,<38",
     "pytest>=9.1.1,<10",
     "jubilant>=1.13,<2",
     "pytest-jubilant>=2,<3",
