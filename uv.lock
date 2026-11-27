@@ -306,14 +306,14 @@ wheels = [
 
 [[package]]
 name = "flake8-builtins"
-version = "1.5.3"
+version = "3.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "flake8" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/84/5a/bdeb2ffd2bbf200d17bd4c654a1c789380ca654515cdd321696ee6c80189/flake8-builtins-1.5.3.tar.gz", hash = "sha256:09998853b2405e98e61d2ff3027c47033adbdc17f9fe44ca58443d876eb00f3b", size = 16581, upload-time = "2020-05-14T10:45:03.482Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/49/d9/8c7f3e411e65ec169c95f5069a5307b2c5b3f258d3a3d2ecf0a09ecc63ad/flake8_builtins-3.1.0.tar.gz", hash = "sha256:10d29d7a81ba6546a26461e83ce1936644764a678ff6337b97a894ebc4db07c1", size = 18378, upload-time = "2025-10-25T13:45:58.587Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fb/84/6ee650fc479ecee8f143d20fdb7526595ef8c41382d24cc380c4c08e1aac/flake8_builtins-1.5.3-py2.py3-none-any.whl", hash = "sha256:7706babee43879320376861897e5d1468e396a40b8918ed7bccf70e5f90b8687", size = 12988, upload-time = "2020-05-14T10:45:01.642Z" },
+    { url = "https://files.pythonhosted.org/packages/ba/a9/bf3f0e4b18002c0dc4ebe58c2950ae30a83ae82cf05a96d569818c7f0eb6/flake8_builtins-3.1.0-py3-none-any.whl", hash = "sha256:ac09803ddfcce7f67899d24b1ecf4f4bff303d8ebc07a0dde4a2a587cf9d9363", size = 18892, upload-time = "2025-10-25T13:45:56.881Z" },
 ]
 
 [[package]]
@@ -1399,7 +1399,7 @@ requires-dist = [
     { name = "cosl", marker = "extra == 'unit'", specifier = "==0.0.6" },
     { name = "coverage", extras = ["toml"], marker = "extra == 'unit'", specifier = "==6.4.4" },
     { name = "flake8", marker = "extra == 'lint'", specifier = "==7.0.0" },
-    { name = "flake8-builtins", marker = "extra == 'lint'", specifier = "==1.5.3" },
+    { name = "flake8-builtins", marker = "extra == 'lint'", specifier = "==3.1.0" },
     { name = "flake8-copyright", marker = "extra == 'lint'", specifier = "==0.2.4" },
     { name = "flake8-docstrings", marker = "extra == 'lint'", specifier = "==1.6.0" },
     { name = "flake8-docstrings-complete", marker = "extra == 'lint'", specifier = ">=1.0.3" },
